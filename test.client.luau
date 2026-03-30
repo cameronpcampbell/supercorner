@@ -7,17 +7,75 @@ local Players = game:GetService("Players")
 local uicornerplus = require(RepStorage.uicornerplus)
 
 local SIZE = 200
+local SLIDER_HEIGHT = 40
+local GAP = 80
 
 local screen_gui = Instance.new("ScreenGui")
 screen_gui.Parent = Players.LocalPlayer.PlayerGui
 
+-- Column container helper: vertically stacks a title, the preview, and sliders
+local function create_column(anchor_x: number, position_x_scale: number, position_x_offset: number): Frame
+	const column = Instance.new("Frame")
+	column.Size = UDim2.new(0, SIZE, 1, 0)
+	column.AnchorPoint = Vector2.new(anchor_x, 0.5)
+	column.Position = UDim2.new(position_x_scale, position_x_offset, 0.5, 0)
+	column.BackgroundTransparency = 1
+	column.AutomaticSize = Enum.AutomaticSize.Y
+	column.Parent = screen_gui
+
+	const layout = Instance.new("UIListLayout")
+	layout.FillDirection = Enum.FillDirection.Vertical
+	layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+	layout.SortOrder = Enum.SortOrder.LayoutOrder
+	layout.Padding = UDim.new(0, 8)
+	layout.Parent = column
+
+	return column
+end
+
+-- Squircle column (left)
+const squircle_column = create_column(1, 0.5, -GAP / 2)
+
+const squircle_title = Instance.new("TextLabel")
+squircle_title.Size = UDim2.new(1, 0, 0, 20)
+squircle_title.BackgroundTransparency = 1
+squircle_title.TextColor3 = Color3.new(1, 1, 1)
+squircle_title.TextSize = 14
+squircle_title.Font = Enum.Font.GothamBold
+squircle_title.Text = "UICornerPlus"
+squircle_title.LayoutOrder = 0
+squircle_title.Parent = squircle_column
+
 local image_label = Instance.new("ImageLabel")
 image_label.Size = UDim2.fromOffset(SIZE, SIZE)
-image_label.AnchorPoint = Vector2.new(0.5, 0.5)
-image_label.Position = UDim2.fromScale(0.5, 0.5)
 image_label.BackgroundTransparency = 1
-image_label.Parent = screen_gui
+image_label.LayoutOrder = 1
+image_label.Parent = squircle_column
 
+-- Native column (right)
+const native_column = create_column(0, 0.5, GAP / 2)
+
+const native_title = Instance.new("TextLabel")
+native_title.Size = UDim2.new(1, 0, 0, 20)
+native_title.BackgroundTransparency = 1
+native_title.TextColor3 = Color3.new(1, 1, 1)
+native_title.TextSize = 14
+native_title.Font = Enum.Font.GothamBold
+native_title.Text = "Native UICorner"
+native_title.LayoutOrder = 0
+native_title.Parent = native_column
+
+const native_frame = Instance.new("Frame")
+native_frame.Size = UDim2.fromOffset(SIZE, SIZE)
+native_frame.BackgroundColor3 = BrickColor.Blue().Color
+native_frame.BorderSizePixel = 0
+native_frame.LayoutOrder = 1
+native_frame.Parent = native_column
+
+const native_corner = Instance.new("UICorner")
+native_corner.Parent = native_frame
+
+-- State
 local corner_radius = 100
 local corner_smoothing = 1
 local top_left_radius: number? = nil
@@ -25,7 +83,7 @@ local top_right_radius: number? = nil
 local bottom_right_radius: number? = nil
 local bottom_left_radius: number? = nil
 
-local squircle = uicornerplus.create({
+const squircle = uicornerplus.create({
 	width = SIZE * 2,
 	height = SIZE * 2,
 	cornerRadius = corner_radius,
@@ -33,7 +91,6 @@ local squircle = uicornerplus.create({
 })
 
 image_label.ImageColor3 = BrickColor.Blue().Color
-
 image_label.ImageContent = squircle:get_content()
 
 local function redraw()
@@ -49,52 +106,60 @@ local function redraw()
 	image_label.ImageContent = squircle:get_content()
 end
 
+-- Slider system
+type SliderSetValue = (value: number) -> ()
+
 local function create_slider(
 	name: string,
 	min_val: number,
 	max_val: number,
 	initial: number,
-	position: UDim2,
+	step: number,
+	layout_order: number,
+	parent: Frame,
 	on_changed: (number) -> ()
-)
-	local container = Instance.new("Frame")
-	container.Size = UDim2.fromOffset(300, 40)
-	container.AnchorPoint = Vector2.new(0.5, 1)
-	container.Position = position
-	container.BackgroundTransparency = 1
-	container.Parent = screen_gui
+): SliderSetValue
+	const function round(v: number): number
+		return math.round(v / step) * step
+	end
 
-	local label = Instance.new("TextLabel")
+	const container = Instance.new("Frame")
+	container.Size = UDim2.new(1, 0, 0, SLIDER_HEIGHT)
+	container.BackgroundTransparency = 1
+	container.LayoutOrder = layout_order
+	container.Parent = parent
+
+	const label = Instance.new("TextLabel")
 	label.Size = UDim2.new(1, 0, 0, 16)
 	label.BackgroundTransparency = 1
 	label.TextColor3 = Color3.new(1, 1, 1)
 	label.TextSize = 14
 	label.Font = Enum.Font.GothamMedium
-	label.Text = string.format("%s: %.2f", name, initial)
+	label.Text = string.format("%s: %g", name, initial)
 	label.Parent = container
 
-	local track = Instance.new("Frame")
+	const track = Instance.new("Frame")
 	track.Size = UDim2.new(1, 0, 0, 6)
 	track.Position = UDim2.new(0, 0, 0, 24)
 	track.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
 	track.BorderSizePixel = 0
 	track.Parent = container
 
-	local track_corner = Instance.new("UICorner")
+	const track_corner = Instance.new("UICorner")
 	track_corner.CornerRadius = UDim.new(0, 3)
 	track_corner.Parent = track
 
-	local fill = Instance.new("Frame")
+	const fill = Instance.new("Frame")
 	fill.Size = UDim2.fromScale((initial - min_val) / (max_val - min_val), 1)
 	fill.BackgroundColor3 = Color3.fromRGB(88, 101, 242)
 	fill.BorderSizePixel = 0
 	fill.Parent = track
 
-	local fill_corner = Instance.new("UICorner")
+	const fill_corner = Instance.new("UICorner")
 	fill_corner.CornerRadius = UDim.new(0, 3)
 	fill_corner.Parent = fill
 
-	local knob = Instance.new("Frame")
+	const knob = Instance.new("Frame")
 	knob.Size = UDim2.fromOffset(14, 14)
 	knob.AnchorPoint = Vector2.new(0.5, 0.5)
 	knob.Position = UDim2.new((initial - min_val) / (max_val - min_val), 0, 0.5, 0)
@@ -102,22 +167,33 @@ local function create_slider(
 	knob.BorderSizePixel = 0
 	knob.Parent = track
 
-	local knob_corner = Instance.new("UICorner")
+	const knob_corner = Instance.new("UICorner")
 	knob_corner.CornerRadius = UDim.new(1, 0)
 	knob_corner.Parent = knob
 
 	local dragging = false
+	local last_value = round(initial)
 
-	local function update_from_x(abs_x: number)
-		local track_abs_pos = track.AbsolutePosition.X
-		local track_abs_size = track.AbsoluteSize.X
-		local t = math.clamp((abs_x - track_abs_pos) / track_abs_size, 0, 1)
-		local value = min_val + t * (max_val - min_val)
-
+	local function set_value(value: number)
+		const rounded = round(value)
+		const t = math.clamp((rounded - min_val) / (max_val - min_val), 0, 1)
 		knob.Position = UDim2.new(t, 0, 0.5, 0)
 		fill.Size = UDim2.fromScale(t, 1)
-		label.Text = string.format("%s: %.2f", name, value)
-		on_changed(value)
+		label.Text = string.format("%s: %g", name, rounded)
+
+		if rounded == last_value then
+			return
+		end
+
+		last_value = rounded
+		on_changed(rounded)
+	end
+
+	local function update_from_x(abs_x: number)
+		const track_abs_pos = track.AbsolutePosition.X
+		const track_abs_size = track.AbsoluteSize.X
+		const t = math.clamp((abs_x - track_abs_pos) / track_abs_size, 0, 1)
+		set_value(min_val + t * (max_val - min_val))
 	end
 
 	knob.InputBegan:Connect(function(input)
@@ -144,42 +220,70 @@ local function create_slider(
 			dragging = false
 		end
 	end)
+
+	return set_value
 end
 
-local slider_index = 0
+-- Corner radius sync (shift-drag links all corner sliders)
+local corner_setters: { SliderSetValue } = {}
+local syncing = false
 
-local function add_slider(name: string, min_val: number, max_val: number, initial: number, on_changed: (number) -> ())
-	local y_offset = -5 - slider_index * 45
-	create_slider(name, min_val, max_val, initial, UDim2.new(0.5, 0, 1, y_offset), on_changed)
-	slider_index += 1
+local function corner_changed(value: number, index: number)
+	if index == 1 then top_left_radius = value
+
+	elseif index == 2 then top_right_radius = value
+
+	elseif index == 3 then bottom_right_radius = value
+
+	elseif index == 4 then bottom_left_radius = value
+
+	elseif index == 5 then native_corner.CornerRadius = UDim.new(0, value)
+	end
+
+	if not syncing and (UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) or UserInputService:IsKeyDown(Enum.KeyCode.RightShift)) then
+		syncing = true
+		for i, setter in corner_setters do
+			if i ~= index then
+				setter(value)
+			end
+		end
+		syncing = false
+	end
+
+	if index ~= 5 then
+		redraw()
+	end
 end
 
-add_slider("Corner Smoothing", 0, 1, corner_smoothing, function(value)
+-- Squircle sliders
+local squircle_slider_order = 2
+
+create_slider("Smoothing", 0, 1, corner_smoothing, 0.01, squircle_slider_order, squircle_column, function(value)
 	corner_smoothing = value
 	redraw()
 end)
+squircle_slider_order += 1
 
-add_slider("Corner Radius", 0, SIZE, corner_radius, function(value)
-	corner_radius = value
-	redraw()
-end)
+table.insert(corner_setters, create_slider("Top Left", 0, SIZE, corner_radius, 1, squircle_slider_order, squircle_column, function(value)
+	corner_changed(value, 1)
+end))
+squircle_slider_order += 1
 
-add_slider("Top Left", 0, SIZE, corner_radius, function(value)
-	top_left_radius = value
-	redraw()
-end)
+table.insert(corner_setters, create_slider("Top Right", 0, SIZE, corner_radius, 1, squircle_slider_order, squircle_column, function(value)
+	corner_changed(value, 2)
+end))
+squircle_slider_order += 1
 
-add_slider("Top Right", 0, SIZE, corner_radius, function(value)
-	top_right_radius = value
-	redraw()
-end)
+table.insert(corner_setters, create_slider("Bottom Right", 0, SIZE, corner_radius, 1, squircle_slider_order, squircle_column, function(value)
+	corner_changed(value, 3)
+end))
+squircle_slider_order += 1
 
-add_slider("Bottom Right", 0, SIZE, corner_radius, function(value)
-	bottom_right_radius = value
-	redraw()
-end)
+table.insert(corner_setters, create_slider("Bottom Left", 0, SIZE, corner_radius, 1, squircle_slider_order, squircle_column, function(value)
+	corner_changed(value, 4)
+end))
 
-add_slider("Bottom Left", 0, SIZE, corner_radius, function(value)
-	bottom_left_radius = value
-	redraw()
-end)
+-- Native slider
+table.insert(corner_setters, create_slider("Corner Radius", 0, SIZE, corner_radius, 1, 2, native_column, function(value)
+	corner_changed(value, 5)
+end))
