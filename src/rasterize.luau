@@ -1,10 +1,12 @@
 --!strict
 
--- Edge layout: y_min(0) y_max(4) x_at_ymin(8) dx_per_dy(12) dir(16)
+-- Edge buffer layout (f32 fields at byte offsets)
+-- [0] y_min  [4] y_max  [8] x_at_ymin  [12] dx_per_dy  [16] dir (+1/-1)
 const EDGE_STRIDE = 20
 
 const VERTEX_STRIDE = 8
 
+-- Fill a pixel span using repeated buffer.copy doubling (1→2→4→8→...)
 local function fill_interior(
     pixel_buf: buffer,
     span_start: number,
@@ -21,6 +23,7 @@ local function fill_interior(
     end
 end
 
+-- Clip an edge intersection pair to pixel bounds and fill the span
 local function fill_span_solid(
     pixel_buf: buffer,
     row_offset: number,
@@ -40,8 +43,9 @@ local function fill_span_solid(
     fill_interior(pixel_buf, row_offset + px_left * 4, span, color_u32)
 end
 
--- Compute signed area coverage for one edge within one scanline row.
--- Writes fractional area and fill (winding delta) into per-scanline buffers.
+-- Signed area coverage for one edge within a single scanline band [y_top, y_top+1].
+-- area_buf accumulates the pixel-local signed area (used for edge pixels).
+-- fill_buf accumulates the winding delta (propagated across the scanline via prefix sum).
 local function process_edge_aa(
     area_buf: buffer,
     fill_buf: buffer,
@@ -68,7 +72,7 @@ local function process_edge_aa(
     const ix0 = math.clamp(math.floor(x_lo), 0, width - 1)
     const ix1 = math.clamp(math.floor(x_hi), 0, width - 1)
 
-    -- Single pixel column (common case: near-vertical edges)
+    -- Near-vertical edges: single pixel column
     if ix0 == ix1 then
         const avg_x = math.clamp(((x0 - ix0) + (x1 - ix0)) / 2, 0, 1)
         const covered = h * (1 - avg_x)
@@ -79,7 +83,7 @@ local function process_edge_aa(
         return
     end
 
-    -- Multi-pixel: split edge at integer x boundaries
+    -- Near-horizontal edges: split at integer x boundaries
     const x_to_y = h / (x1 - x0)
 
     for ix = ix0, ix1 do
@@ -102,6 +106,8 @@ local function process_edge_aa(
     end
 end
 
+-- Find sorted edge-scanline intersections for the non-AA path.
+-- Returns updated first_edge_offset (for active edge tracking) and intersection count.
 local function find_intersections(
     edge_buf: buffer,
     edge_end: number,
@@ -109,6 +115,7 @@ local function find_intersections(
     x_buf: buffer,
     scan_y: number
 ): (number, number)
+    -- Skip edges that end before this scanline
     while first_edge_offset < edge_end and buffer.readf32(edge_buf, first_edge_offset + 4) <= scan_y do
         first_edge_offset += EDGE_STRIDE
     end
@@ -132,6 +139,7 @@ local function find_intersections(
         const dx_per_dy = buffer.readf32(edge_buf, e_offset + 12)
         const x_intersect = x_at_ymin + (scan_y - y_min) * dx_per_dy
 
+        -- Insertion sort into x_buf
         local pos = x_count
 
         while pos > 0 and buffer.readf32(x_buf, (pos - 1) * 4) > x_intersect do
@@ -158,6 +166,7 @@ local function rasterize_into(
     a: number,
     anti_alias: boolean
 )
+    -- Build edge table from polygon vertices
     local edge_buf = buffer.create(vertex_count * EDGE_STRIDE)
     local edge_count = 0
     local shape_y_min = math.huge
@@ -179,6 +188,7 @@ local function rasterize_into(
 
         const offset = edge_count * EDGE_STRIDE
 
+        -- Orient edges so y_min < y_max; dir tracks original winding direction
         if y0 < y1 then
             buffer.writef32(edge_buf, offset, y0)
             buffer.writef32(edge_buf, offset + 4, y1)
@@ -187,6 +197,7 @@ local function rasterize_into(
             buffer.writef32(edge_buf, offset + 16, 1)
             if y0 < shape_y_min then shape_y_min = y0 end
             if y1 > shape_y_max then shape_y_max = y1 end
+
         else
             buffer.writef32(edge_buf, offset, y1)
             buffer.writef32(edge_buf, offset + 4, y0)
@@ -200,7 +211,7 @@ local function rasterize_into(
         edge_count += 1
     end
 
-    -- Insertion sort edges by y_min
+    -- Sort edges by y_min for scanline traversal
     for i = 1, edge_count - 1 do
         const i_offset = i * EDGE_STRIDE
 
@@ -251,7 +262,7 @@ local function rasterize_into(
         local prev_x_max = -1
 
         for y = y_start, y_end do
-            -- Clear only the previously dirty range
+            -- Only clear the pixel range dirtied by the previous scanline
             if prev_x_min <= prev_x_max then
                 const clear_off = prev_x_min * 4
                 const clear_len = (prev_x_max - prev_x_min + 1) * 4
@@ -262,12 +273,11 @@ local function rasterize_into(
             local scan_x_min = width
             local scan_x_max = -1
 
-            -- Advance past completed edges
+            -- Advance past edges whose y_max is behind this scanline
             while first_edge_offset < edge_end and buffer.readf32(edge_buf, first_edge_offset + 4) <= y do
                 first_edge_offset += EDGE_STRIDE
             end
 
-            -- Process active edges
             for e_offset = first_edge_offset, edge_end - EDGE_STRIDE, EDGE_STRIDE do
                 const e_y_min = buffer.readf32(edge_buf, e_offset)
 
@@ -280,7 +290,6 @@ local function rasterize_into(
                 const e_dx = buffer.readf32(edge_buf, e_offset + 12)
                 const e_dir = buffer.readf32(edge_buf, e_offset + 16)
 
-                -- Track x range for flush
                 const ex0 = e_x + (math.max(y, e_y_min) - e_y_min) * e_dx
                 const ex1 = e_x + (math.min(y + 1, e_y_max) - e_y_min) * e_dx
                 const ixl = math.clamp(math.floor(math.min(ex0, ex1)), 0, width - 1)
@@ -292,7 +301,8 @@ local function rasterize_into(
                 process_edge_aa(area_buf, fill_buf, e_y_min, e_y_max, e_x, e_dx, e_dir, y, width)
             end
 
-            -- Accumulate coverage and write pixels
+            -- Prefix-sum accumulation: coverage = |area + running_sum|
+            -- Consecutive solid pixels are batched into a single fill_interior call
             if scan_x_min <= scan_x_max then
                 local sum = 0.0
                 local solid_run_start = -1
@@ -309,7 +319,6 @@ local function rasterize_into(
                         continue
                     end
 
-                    -- Flush any solid run before this non-solid pixel
                     if solid_run_start >= 0 then
                         fill_interior(pixel_buf, row_offset + solid_run_start * 4, px - solid_run_start, color_u32)
                         solid_run_start = -1
@@ -321,7 +330,6 @@ local function rasterize_into(
                     end
                 end
 
-                -- Flush trailing solid run
                 if solid_run_start >= 0 then
                     fill_interior(pixel_buf, row_offset + solid_run_start * 4, scan_x_max - solid_run_start + 1, color_u32)
                 end
@@ -331,7 +339,9 @@ local function rasterize_into(
             prev_x_max = scan_x_max
             row_offset += row_stride
         end
+
     else
+        -- Non-AA: even-odd scanline fill at pixel centers
         for y = y_start, y_end do
             const scan_y = y + 0.5
             local x_count: number

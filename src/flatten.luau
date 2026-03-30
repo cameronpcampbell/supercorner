@@ -40,8 +40,8 @@ const function flatten(ops: { SvgOp }, tolerance: number): (buffer, number)
 	const tol_sq = tolerance * tolerance
 	const MAX_DEPTH = 16
 
-	-- Iterative De Casteljau with explicit buffer stack
-	-- Each stack entry: x0 y0 x1 y1 x2 y2 x3 y3 depth (9 floats = 36 bytes)
+	-- Iterative De Casteljau subdivision using an explicit buffer stack.
+	-- Stack entry: x0 y0 x1 y1 x2 y2 x3 y3 depth (9 × f32 = 36 bytes)
 	const STACK_STRIDE = 36
 	const stack_buf = buffer.create(MAX_DEPTH * 2 * STACK_STRIDE)
 
@@ -52,7 +52,6 @@ const function flatten(ops: { SvgOp }, tolerance: number): (buffer, number)
 		sx3: number, sy3: number
 	)
 		local sp = 0
-		-- Push initial curve
 		buffer.writef32(stack_buf, 0, sx0)
 		buffer.writef32(stack_buf, 4, sy0)
 		buffer.writef32(stack_buf, 8, sx1)
@@ -86,6 +85,7 @@ const function flatten(ops: { SvgOp }, tolerance: number): (buffer, number)
 				continue
 			end
 
+			-- Flatness test: max distance from control points to the chord
 			const inv_d_sq = 1.0 / d_sq
 
 			const t1 = ((x1 - x0) * dx + (y1 - y0) * dy) * inv_d_sq
@@ -103,6 +103,7 @@ const function flatten(ops: { SvgOp }, tolerance: number): (buffer, number)
 				continue
 			end
 
+			-- De Casteljau midpoint split
 			const m01x = (x0 + x1) * 0.5
 			const m01y = (y0 + y1) * 0.5
 			const m12x = (x1 + x2) * 0.5
@@ -118,7 +119,7 @@ const function flatten(ops: { SvgOp }, tolerance: number): (buffer, number)
 			const mx = (m012x + m123x) * 0.5
 			const my = (m012y + m123y) * 0.5
 
-			-- Push right half first (processed second = correct order)
+			-- Push right half first so left half is popped first (preserves vertex order)
 			const r_base = sp * STACK_STRIDE
 			buffer.writef32(stack_buf, r_base, mx)
 			buffer.writef32(stack_buf, r_base + 4, my)
@@ -131,7 +132,6 @@ const function flatten(ops: { SvgOp }, tolerance: number): (buffer, number)
 			buffer.writef32(stack_buf, r_base + 32, depth + 1)
 			sp += 1
 
-			-- Push left half second (processed first)
 			const l_base = sp * STACK_STRIDE
 			buffer.writef32(stack_buf, l_base, x0)
 			buffer.writef32(stack_buf, l_base + 4, y0)
@@ -146,7 +146,8 @@ const function flatten(ops: { SvgOp }, tolerance: number): (buffer, number)
 		end
 	end
 
-	-- SVG endpoint-to-center arc conversion (per SVG spec F.6.5–F.6.6)
+	-- SVG arc: endpoint-to-center parameterization (SVG spec F.6.5–F.6.6),
+	-- then incremental rotation to avoid per-step trig calls
 	const function flatten_arc(
 		cx: number, cy: number,
 		rx: number, ry: number,
@@ -184,6 +185,7 @@ const function flatten(ops: { SvgOp }, tolerance: number): (buffer, number)
 		local rx_sq = rx * rx
 		local ry_sq = ry * ry
 
+		-- Scale radii if the ellipse is too small to reach both endpoints
 		const lambda = x1p_sq / rx_sq + y1p_sq / ry_sq
 		if lambda > 1.0 then
 			const scale = math.sqrt(lambda)
@@ -196,14 +198,8 @@ const function flatten(ops: { SvgOp }, tolerance: number): (buffer, number)
 		const num = math.max(0, rx_sq * ry_sq - rx_sq * y1p_sq - ry_sq * x1p_sq)
 		const den = rx_sq * y1p_sq + ry_sq * x1p_sq
 
-		local sq = 0.0
-		if den > 1e-10 then
-			sq = math.sqrt(num / den)
-		end
-
-		if large_arc == sweep then
-			sq = -sq
-		end
+		local sq = if den > 1e-10 then math.sqrt(num / den) else 0.0
+		sq = if large_arc == sweep then -sq else sq
 
 		const cxp = sq * rx * y1p / ry
 		const cyp = -sq * ry * x1p / rx
@@ -216,16 +212,18 @@ const function flatten(ops: { SvgOp }, tolerance: number): (buffer, number)
 
 		if sweep == 1 and dtheta < 0 then
 			dtheta += 2 * math.pi
+
 		elseif sweep == 0 and dtheta > 0 then
 			dtheta -= 2 * math.pi
 		end
 
+		-- Step count from chord deviation: r·θ²/8 ≤ tolerance → θ ≤ sqrt(8·tol/r)
 		const max_r = math.max(rx, ry)
-		-- Chord deviation for arc step θ ≈ r·θ²/8, so max step = sqrt(8·tol/r)
 		const max_step = math.sqrt(8 * tolerance / max_r)
 		const num_steps = math.max(4, math.ceil(math.abs(dtheta) / max_step))
 		const step = dtheta / num_steps
 
+		-- Incremental rotation via angle-addition identity (avoids per-step cos/sin)
 		const cos_step = math.cos(step)
 		const sin_step = math.sin(step)
 
@@ -252,8 +250,10 @@ const function flatten(ops: { SvgOp }, tolerance: number): (buffer, number)
 			start_x = op.x
 			start_y = op.y
 			emit(op.x, op.y)
+
 		elseif op.type == "L" then
 			emit(op.x, op.y)
+
 		elseif op.type == "c" then
 			const x0 = cur_x
 			const y0 = cur_y
@@ -263,6 +263,7 @@ const function flatten(ops: { SvgOp }, tolerance: number): (buffer, number)
 				x0 + op.dx2, y0 + op.dy2,
 				x0 + op.dx, y0 + op.dy
 			)
+
 		elseif op.type == "a" then
 			flatten_arc(
 				cur_x, cur_y,
@@ -271,6 +272,7 @@ const function flatten(ops: { SvgOp }, tolerance: number): (buffer, number)
 				op.largeArc, op.sweep,
 				op.dx, op.dy
 			)
+
 		elseif op.type == "Z" then
 			if cur_x ~= start_x or cur_y ~= start_y then
 				emit(start_x, start_y)

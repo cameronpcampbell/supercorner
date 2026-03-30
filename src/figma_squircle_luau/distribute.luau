@@ -38,11 +38,7 @@ const ADJACENTS: { [CornerName]: Adjacency } = {
 }
 
 const function get_side_length(side: SideName, width: number, height: number): number
-	if side == "top" or side == "bottom" then
-		return width
-	else
-		return height
-	end
+	return if side == "top" or side == "bottom" then width else height
 end
 
 const function get_corner_radius(corner: CornerName, radii: { [CornerName]: number }): number
@@ -84,19 +80,11 @@ const function distribute_and_normalize(
 		for _, adj in adjacents do
 			local adj_radius = get_corner_radius(adj.corner, radii)
 			local side_length = get_side_length(adj.side, width, height)
-			local budget: number
+			const budget = if radius == 0 and adj_radius == 0 then 0
+				elseif budgets[adj.corner] >= 0 then side_length - budgets[adj.corner]
+				else (radius / (radius + adj_radius)) * side_length
 
-			if radius == 0 and adj_radius == 0 then
-				budget = 0
-			elseif budgets[adj.corner] >= 0 then
-				budget = side_length - budgets[adj.corner]
-			else
-				budget = (radius / (radius + adj_radius)) * side_length
-			end
-
-			if budget < min_budget then
-				min_budget = budget
-			end
+			min_budget = math.min(min_budget, budget)
 		end
 
 		budgets[corner_name] = min_budget
