@@ -11,8 +11,6 @@ export type CreateParams = {
 	height: number,
 	cornerRadius: number,
 	cornerSmoothing: number,
-	color: Color3,
-	transparency: number?,
 	topLeftCornerRadius: number?,
 	topRightCornerRadius: number?,
 	bottomRightCornerRadius: number?,
@@ -24,8 +22,6 @@ export type CreateParams = {
 export type RedrawParams = {
 	cornerRadius: number,
 	cornerSmoothing: number,
-	color: Color3,
-	transparency: number?,
 	topLeftCornerRadius: number?,
 	topRightCornerRadius: number?,
 	bottomRightCornerRadius: number?,
@@ -51,8 +47,6 @@ type SquircleState = {
 const function render(state: SquircleState, params: RedrawParams)
 	const width = state._width
 	const height = state._height
-	const color = params.color
-	const transparency = params.transparency or 0
 
 	const ops = figma_squircle.get_svg_path({
 		width = width,
@@ -78,10 +72,7 @@ const function render(state: SquircleState, params: RedrawParams)
 		vertex_count,
 		width,
 		height,
-		color.R,
-		color.G,
-		color.B,
-		1 - transparency,
+		1, 1, 1, 1,
 		anti_alias
 	)
 

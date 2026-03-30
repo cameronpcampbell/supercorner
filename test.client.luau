@@ -20,14 +20,19 @@ image_label.Parent = screen_gui
 
 local corner_radius = 100
 local corner_smoothing = 1
+local top_left_radius: number? = nil
+local top_right_radius: number? = nil
+local bottom_right_radius: number? = nil
+local bottom_left_radius: number? = nil
 
 local squircle = uicornerplus.create({
 	width = SIZE * 2,
 	height = SIZE * 2,
 	cornerRadius = corner_radius,
 	cornerSmoothing = corner_smoothing,
-	color = Color3.fromRGB(0, 0, 0),
 })
+
+image_label.ImageColor3 = BrickColor.Blue().Color
 
 image_label.ImageContent = squircle:get_content()
 
@@ -35,7 +40,10 @@ local function redraw()
 	squircle:redraw({
 		cornerRadius = corner_radius,
 		cornerSmoothing = corner_smoothing,
-		color = Color3.fromRGB(0, 0, 0),
+		topLeftCornerRadius = top_left_radius,
+		topRightCornerRadius = top_right_radius,
+		bottomRightCornerRadius = bottom_right_radius,
+		bottomLeftCornerRadius = bottom_left_radius,
 	})
 
 	image_label.ImageContent = squircle:get_content()
@@ -138,12 +146,40 @@ local function create_slider(
 	end)
 end
 
-create_slider("Corner Radius", 0, SIZE, corner_radius, UDim2.new(0.5, 0, 1, -50), function(value)
+local slider_index = 0
+
+local function add_slider(name: string, min_val: number, max_val: number, initial: number, on_changed: (number) -> ())
+	local y_offset = -5 - slider_index * 45
+	create_slider(name, min_val, max_val, initial, UDim2.new(0.5, 0, 1, y_offset), on_changed)
+	slider_index += 1
+end
+
+add_slider("Corner Smoothing", 0, 1, corner_smoothing, function(value)
+	corner_smoothing = value
+	redraw()
+end)
+
+add_slider("Corner Radius", 0, SIZE, corner_radius, function(value)
 	corner_radius = value
 	redraw()
 end)
 
-create_slider("Corner Smoothing", 0, 1, corner_smoothing, UDim2.new(0.5, 0, 1, -5), function(value)
-	corner_smoothing = value
+add_slider("Top Left", 0, SIZE, corner_radius, function(value)
+	top_left_radius = value
+	redraw()
+end)
+
+add_slider("Top Right", 0, SIZE, corner_radius, function(value)
+	top_right_radius = value
+	redraw()
+end)
+
+add_slider("Bottom Right", 0, SIZE, corner_radius, function(value)
+	bottom_right_radius = value
+	redraw()
+end)
+
+add_slider("Bottom Left", 0, SIZE, corner_radius, function(value)
+	bottom_left_radius = value
 	redraw()
 end)
