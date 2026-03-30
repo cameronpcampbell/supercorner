@@ -5,6 +5,10 @@ const EDGE_STRIDE = 16
 
 const VERTEX_STRIDE = 8
 
+-- Sub-pixel tolerance for snapping edge intersections to pixel boundaries.
+-- Absorbs floating-point drift accumulated during curve flattening.
+const SNAP_EPSILON = 1 / 64
+
 const function rasterize_into(
 	pixel_buf: buffer,
 	vertices: buffer,
@@ -119,6 +123,7 @@ const function rasterize_into(
 			if y_max > scan_y then
 				const x_at_ymin = buffer.readf32(edge_buf, e_offset + 8)
 				const dx_per_dy = buffer.readf32(edge_buf, e_offset + 12)
+
 				const x_intersect = x_at_ymin + (scan_y - y_min) * dx_per_dy
 
 				local pos = x_count
@@ -139,8 +144,8 @@ const function rasterize_into(
 			const x_left = buffer.readf32(x_buf, pair * 4)
 			const x_right = buffer.readf32(x_buf, (pair + 1) * 4)
 
-			const px_left = math.max(0, math.ceil(x_left))
-			const px_right = math.min(width - 1, math.floor(x_right))
+			const px_left = math.max(0, math.ceil(x_left - SNAP_EPSILON))
+			const px_right = math.min(width - 1, math.floor(x_right + SNAP_EPSILON))
 
 			const span = px_right - px_left + 1
 			if span > 0 then

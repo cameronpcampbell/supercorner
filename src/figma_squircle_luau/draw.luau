@@ -225,7 +225,7 @@ const function get_svg_ops(input: SvgPathInput): { SvgOp }
 	const br = input.bottom_right_path_params
 	const bl = input.bottom_left_path_params
 
-	local ops: { SvgOp } = table.create(21)
+	local ops: { SvgOp } = table.create(21) :: { SvgOp }
 
 	table.insert(ops, {
 		type = "M" :: "M",
