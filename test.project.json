@@ -9,9 +9,11 @@
             }
         },
 
-        "ServerScriptService": {
-            "test": {
-                "$path": "test.server.luau"
+        "StarterPlayer": {
+            "StarterPlayerScripts": {
+                "test": {
+                    "$path": "test.client.luau"
+                }
             }
         }
     }
