@@ -18,6 +18,7 @@ export type CreateParams = {
 	bottomRightCornerRadius: number?,
 	bottomLeftCornerRadius: number?,
 	preserveSmoothing: boolean?,
+	antiAlias: boolean?,
 }
 
 export type RedrawParams = {
@@ -30,6 +31,7 @@ export type RedrawParams = {
 	bottomRightCornerRadius: number?,
 	bottomLeftCornerRadius: number?,
 	preserveSmoothing: boolean?,
+	antiAlias: boolean?,
 }
 
 export type Squircle = {
@@ -69,6 +71,8 @@ const function render(state: SquircleState, params: RedrawParams)
 
 	buffer.fill(state._pixel_buf, 0, 0)
 
+	const anti_alias = if params.antiAlias ~= nil then params.antiAlias else true
+
 	rasterize_mod.rasterize_into(
 		state._pixel_buf,
 		vertices,
@@ -78,7 +82,8 @@ const function render(state: SquircleState, params: RedrawParams)
 		color.R,
 		color.G,
 		color.B,
-		1 - transparency
+		1 - transparency,
+		anti_alias
 	)
 
 	state._image:WritePixelsBuffer(
