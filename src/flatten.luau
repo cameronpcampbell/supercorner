@@ -221,7 +221,9 @@ const function flatten(ops: { SvgOp }, tolerance: number): (buffer, number)
 		end
 
 		const max_r = math.max(rx, ry)
-		const num_steps = math.max(4, math.ceil(math.abs(dtheta) * max_r / tolerance))
+		-- Chord deviation for arc step θ ≈ r·θ²/8, so max step = sqrt(8·tol/r)
+		const max_step = math.sqrt(8 * tolerance / max_r)
+		const num_steps = math.max(4, math.ceil(math.abs(dtheta) / max_step))
 		const step = dtheta / num_steps
 
 		const cos_step = math.cos(step)

@@ -324,25 +324,25 @@ local function rasterize_into(
 
                 -- Interior + right edge
                 if interior_start >= 0 then
-                    -- Find right edge start by scanning backward
-                    local interior_end = interior_start
+                    -- Find right edge start by scanning backward past edge pixels
+                    local right_edge_start = interior_start
 
                     for px = scan_x_max, interior_start, -1 do
                         const off = px * 4
-                        if buffer.readf32(area_buf, off) ~= 0 or buffer.readf32(fill_buf, off) ~= 0 then
-                            interior_end = px
+                        if buffer.readf32(area_buf, off) == 0 and buffer.readf32(fill_buf, off) == 0 then
+                            right_edge_start = px + 1
                             break
                         end
                     end
 
                     -- Fast-fill the solid interior
-                    const interior_span = interior_end - interior_start
+                    const interior_span = right_edge_start - interior_start
                     if interior_span > 0 then
                         fill_interior(pixel_buf, row_offset + interior_start * 4, interior_span, color_u32)
                     end
 
                     -- Right edge: pixel-by-pixel AA
-                    for px = interior_end, scan_x_max do
+                    for px = right_edge_start, scan_x_max do
                         const off = px * 4
                         const area = buffer.readf32(area_buf, off)
                         const fill = buffer.readf32(fill_buf, off)
