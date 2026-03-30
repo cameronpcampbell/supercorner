@@ -51,12 +51,12 @@ const function render(state: SquircleState, params: RedrawParams)
 	const ops = figma_squircle.get_svg_path({
 		width = width,
 		height = height,
-		cornerRadius = params.cornerRadius,
+		cornerRadius = params.cornerRadius * 2,
 		cornerSmoothing = params.cornerSmoothing,
-		topLeftCornerRadius = params.topLeftCornerRadius,
-		topRightCornerRadius = params.topRightCornerRadius,
-		bottomRightCornerRadius = params.bottomRightCornerRadius,
-		bottomLeftCornerRadius = params.bottomLeftCornerRadius,
+		topLeftCornerRadius = if params.topLeftCornerRadius then params.topLeftCornerRadius * 2 else nil,
+		topRightCornerRadius = if params.topRightCornerRadius then params.topRightCornerRadius * 2 else nil,
+		bottomRightCornerRadius = if params.bottomRightCornerRadius then params.bottomRightCornerRadius * 2 else nil,
+		bottomLeftCornerRadius = if params.bottomLeftCornerRadius then params.bottomLeftCornerRadius * 2 else nil,
 		preserveSmoothing = params.preserveSmoothing,
 	})
 
@@ -84,8 +84,8 @@ const function render(state: SquircleState, params: RedrawParams)
 end
 
 const function create(params: CreateParams): Squircle
-	const width = params.width
-	const height = params.height
+	const width = params.width * 2
+	const height = params.height * 2
 
 	local state: SquircleState = {
 		_image = AssetService:CreateEditableImage({ Size = Vector2.new(width, height) }),

@@ -1,10 +1,10 @@
 {
-    "name": "uicornerplus",
+    "name": "supercorner",
     "tree": {
         "$className": "DataModel",
 
         "ReplicatedStorage": {
-            "uicornerplus": {
+            "supercorner": {
                 "$path": "default.project.json"
             }
         },
