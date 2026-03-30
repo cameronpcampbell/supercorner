@@ -247,10 +247,17 @@ local function rasterize_into(
     if anti_alias then
         const area_buf = buffer.create(width * 4)
         const fill_buf = buffer.create(width * 4)
+        local prev_x_min = 0
+        local prev_x_max = -1
 
         for y = y_start, y_end do
-            buffer.fill(area_buf, 0, 0, width * 4)
-            buffer.fill(fill_buf, 0, 0, width * 4)
+            -- Clear only the previously dirty range
+            if prev_x_min <= prev_x_max then
+                const clear_off = prev_x_min * 4
+                const clear_len = (prev_x_max - prev_x_min + 1) * 4
+                buffer.fill(area_buf, clear_off, 0, clear_len)
+                buffer.fill(fill_buf, clear_off, 0, clear_len)
+            end
 
             local scan_x_min = width
             local scan_x_max = -1
@@ -288,25 +295,76 @@ local function rasterize_into(
             -- Accumulate coverage and write pixels
             if scan_x_min <= scan_x_max then
                 local sum = 0.0
+                local interior_start = -1
 
+                -- Left edge: pixel-by-pixel AA until we hit solid interior
                 for px = scan_x_min, scan_x_max do
-                    const coverage = math.min(math.abs(buffer.readf32(area_buf, px * 4) + sum), 1)
-                    sum += buffer.readf32(fill_buf, px * 4)
+                    const off = px * 4
+                    const area = buffer.readf32(area_buf, off)
+                    const fill = buffer.readf32(fill_buf, off)
+                    const coverage = math.min(math.abs(area + sum), 1)
+                    sum += fill
 
                     if coverage <= 0 then
                         continue
                     end
 
-                    if coverage >= 1 then
-                        buffer.writeu32(pixel_buf, row_offset + px * 4, color_u32)
-                        continue
+                    if coverage >= 1 and area == 0 and fill == 0 then
+                        interior_start = px
+                        break
                     end
 
-                    const aa_alpha = math.floor(ab * coverage + 0.5)
-                    buffer.writeu32(pixel_buf, row_offset + px * 4, color_rgb + aa_alpha * 0x1000000)
+                    if coverage >= 1 then
+                        buffer.writeu32(pixel_buf, row_offset + off, color_u32)
+                    else
+                        const aa_alpha = math.floor(ab * coverage + 0.5)
+                        buffer.writeu32(pixel_buf, row_offset + off, color_rgb + aa_alpha * 0x1000000)
+                    end
+                end
+
+                -- Interior + right edge
+                if interior_start >= 0 then
+                    -- Find right edge start by scanning backward
+                    local interior_end = interior_start
+
+                    for px = scan_x_max, interior_start, -1 do
+                        const off = px * 4
+                        if buffer.readf32(area_buf, off) ~= 0 or buffer.readf32(fill_buf, off) ~= 0 then
+                            interior_end = px
+                            break
+                        end
+                    end
+
+                    -- Fast-fill the solid interior
+                    const interior_span = interior_end - interior_start
+                    if interior_span > 0 then
+                        fill_interior(pixel_buf, row_offset + interior_start * 4, interior_span, color_u32)
+                    end
+
+                    -- Right edge: pixel-by-pixel AA
+                    for px = interior_end, scan_x_max do
+                        const off = px * 4
+                        const area = buffer.readf32(area_buf, off)
+                        const fill = buffer.readf32(fill_buf, off)
+                        const coverage = math.min(math.abs(area + sum), 1)
+                        sum += fill
+
+                        if coverage <= 0 then
+                            continue
+                        end
+
+                        if coverage >= 1 then
+                            buffer.writeu32(pixel_buf, row_offset + off, color_u32)
+                        else
+                            const aa_alpha = math.floor(ab * coverage + 0.5)
+                            buffer.writeu32(pixel_buf, row_offset + off, color_rgb + aa_alpha * 0x1000000)
+                        end
+                    end
                 end
             end
 
+            prev_x_min = scan_x_min
+            prev_x_max = scan_x_max
             row_offset += row_stride
         end
     else

@@ -66,12 +66,11 @@ const function render(state: SquircleState, params: RedrawParams)
 		preserveSmoothing = params.preserveSmoothing,
 	})
 
-	const tolerance = math.max(0.5, math.max(width, height) / 400)
+	const anti_alias = if params.antiAlias ~= nil then params.antiAlias else true
+	const tolerance = if anti_alias then 1/4 else 1/2
 	const vertices, vertex_count = flatten_mod.flatten(ops, tolerance)
 
 	buffer.fill(state._pixel_buf, 0, 0)
-
-	const anti_alias = if params.antiAlias ~= nil then params.antiAlias else true
 
 	rasterize_mod.rasterize_into(
 		state._pixel_buf,
