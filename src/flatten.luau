@@ -4,9 +4,6 @@ const squircle_types = require(script.Parent.figma_squircle_luau)
 
 type SvgOp = squircle_types.SvgOp
 
-const FLATNESS_TOLERANCE = 0.5
-const ARC_TOLERANCE = 0.5
-
 const VERTEX_STRIDE = 8
 const INITIAL_CAPACITY = 128
 
@@ -14,7 +11,7 @@ const function create_vertex_buf(capacity: number): buffer
 	return buffer.create(capacity * VERTEX_STRIDE)
 end
 
-const function flatten(ops: { SvgOp }): (buffer, number)
+const function flatten(ops: { SvgOp }, tolerance: number): (buffer, number)
 	local capacity = INITIAL_CAPACITY
 	local buf = create_vertex_buf(capacity)
 	local count = 0
@@ -67,7 +64,7 @@ const function flatten(ops: { SvgOp }): (buffer, number)
 		const py2 = y0 + t2 * dy - y2
 		const d2_sq = px2 * px2 + py2 * py2
 
-		const tol_sq = FLATNESS_TOLERANCE * FLATNESS_TOLERANCE
+		const tol_sq = tolerance * tolerance
 
 		if d1_sq <= tol_sq and d2_sq <= tol_sq then
 			emit(x3, y3)
@@ -168,7 +165,7 @@ const function flatten(ops: { SvgOp }): (buffer, number)
 		end
 
 		const max_r = math.max(rx, ry)
-		const num_steps = math.max(4, math.ceil(math.abs(dtheta) * max_r / ARC_TOLERANCE))
+		const num_steps = math.max(4, math.ceil(math.abs(dtheta) * max_r / tolerance))
 		const step = dtheta / num_steps
 
 		for i = 1, num_steps do

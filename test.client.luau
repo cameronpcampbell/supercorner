@@ -1,12 +1,15 @@
+--!strict
+
 local RepStorage = game:GetService("ReplicatedStorage")
-local AssetService = game:GetService("AssetService")
+local UserInputService = game:GetService("UserInputService")
+local Players = game:GetService("Players")
 
 local uicornerplus = require(RepStorage.uicornerplus)
 
 local SIZE = 200
 
 local screen_gui = Instance.new("ScreenGui")
-screen_gui.Parent = game:GetService("Players").LocalPlayer.PlayerGui
+screen_gui.Parent = Players.LocalPlayer.PlayerGui
 
 local image_label = Instance.new("ImageLabel")
 image_label.Size = UDim2.fromOffset(SIZE, SIZE)
@@ -15,34 +18,28 @@ image_label.Position = UDim2.fromScale(0.5, 0.5)
 image_label.BackgroundTransparency = 1
 image_label.Parent = screen_gui
 
-local editable_image = AssetService:CreateEditableImage({
-	Size = Vector2.new(SIZE * 2, SIZE * 2),
-})
-
 local corner_radius = 100
 local corner_smoothing = 1
 
-local function redraw()
-	editable_image:Destroy()
-	editable_image = AssetService:CreateEditableImage({
-		Size = Vector2.new(SIZE * 2, SIZE * 2),
-	})
+local squircle = uicornerplus.create({
+	width = SIZE * 2,
+	height = SIZE * 2,
+	cornerRadius = corner_radius,
+	cornerSmoothing = corner_smoothing,
+	color = Color3.fromRGB(0, 0, 0),
+})
 
-	uicornerplus.draw_squircle({
-		image = editable_image,
-		width = SIZE * 2,
-		height = SIZE * 2,
+image_label.ImageContent = squircle:get_content()
+
+local function redraw()
+	squircle:redraw({
 		cornerRadius = corner_radius,
 		cornerSmoothing = corner_smoothing,
 		color = Color3.fromRGB(0, 0, 0),
 	})
 
-	image_label.ImageContent = Content.fromObject(editable_image)
+	image_label.ImageContent = squircle:get_content()
 end
-
-redraw()
-
--- Slider controls
 
 local function create_slider(
 	name: string,
@@ -71,7 +68,6 @@ local function create_slider(
 	local track = Instance.new("Frame")
 	track.Size = UDim2.new(1, 0, 0, 6)
 	track.Position = UDim2.new(0, 0, 0, 24)
-	track.AnchorPoint = Vector2.new(0, 0)
 	track.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
 	track.BorderSizePixel = 0
 	track.Parent = container
@@ -129,13 +125,13 @@ local function create_slider(
 		end
 	end)
 
-	game:GetService("UserInputService").InputChanged:Connect(function(input)
+	UserInputService.InputChanged:Connect(function(input)
 		if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
 			update_from_x(input.Position.X)
 		end
 	end)
 
-	game:GetService("UserInputService").InputEnded:Connect(function(input)
+	UserInputService.InputEnded:Connect(function(input)
 		if input.UserInputType == Enum.UserInputType.MouseButton1 then
 			dragging = false
 		end

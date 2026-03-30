@@ -5,7 +5,8 @@ const EDGE_STRIDE = 16
 
 const VERTEX_STRIDE = 8
 
-const function rasterize(
+const function rasterize_into(
+	pixel_buf: buffer,
 	vertices: buffer,
 	vertex_count: number,
 	width: number,
@@ -14,7 +15,7 @@ const function rasterize(
 	g: number,
 	b: number,
 	a: number
-): buffer
+)
 	const max_edges = vertex_count
 	local edge_buf = buffer.create(max_edges * EDGE_STRIDE)
 	local edge_count = 0
@@ -71,8 +72,6 @@ const function rasterize(
 		buffer.writef32(edge_buf, dst + 8, key_x)
 		buffer.writef32(edge_buf, dst + 12, key_dx)
 	end
-
-	const pixel_buf = buffer.create(width * height * 4)
 
 	const rb = math.floor(r * 255 + 0.5)
 	const gb = math.floor(g * 255 + 0.5)
@@ -131,9 +130,8 @@ const function rasterize(
 		end
 	end
 
-	return pixel_buf
 end
 
 return {
-	rasterize = rasterize,
+	rasterize_into = rasterize_into,
 }

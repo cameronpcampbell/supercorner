@@ -4,8 +4,9 @@ const figma_squircle = require("@self/figma_squircle_luau")
 const flatten_mod = require("@self/flatten")
 const rasterize_mod = require("@self/rasterize")
 
-export type SquircleParams = {
-	image: EditableImage,
+local AssetService = game:GetService("AssetService")
+
+export type CreateParams = {
 	width: number,
 	height: number,
 	cornerRadius: number,
@@ -19,9 +20,35 @@ export type SquircleParams = {
 	preserveSmoothing: boolean?,
 }
 
-const function draw_squircle(params: SquircleParams)
-	const width = params.width
-	const height = params.height
+export type RedrawParams = {
+	cornerRadius: number,
+	cornerSmoothing: number,
+	color: Color3,
+	transparency: number?,
+	topLeftCornerRadius: number?,
+	topRightCornerRadius: number?,
+	bottomRightCornerRadius: number?,
+	bottomLeftCornerRadius: number?,
+	preserveSmoothing: boolean?,
+}
+
+export type Squircle = {
+	redraw: (self: Squircle, params: RedrawParams) -> (),
+	get_image: (self: Squircle) -> EditableImage,
+	get_content: (self: Squircle) -> Content,
+	destroy: (self: Squircle) -> (),
+}
+
+type SquircleState = {
+	_image: EditableImage,
+	_pixel_buf: buffer,
+	_width: number,
+	_height: number,
+}
+
+const function render(state: SquircleState, params: RedrawParams)
+	const width = state._width
+	const height = state._height
 	const color = params.color
 	const transparency = params.transparency or 0
 
@@ -37,9 +64,13 @@ const function draw_squircle(params: SquircleParams)
 		preserveSmoothing = params.preserveSmoothing,
 	})
 
-	const vertices, vertex_count = flatten_mod.flatten(ops)
+	const tolerance = math.max(0.5, math.max(width, height) / 400)
+	const vertices, vertex_count = flatten_mod.flatten(ops, tolerance)
 
-	const pixel_buf = rasterize_mod.rasterize(
+	buffer.fill(state._pixel_buf, 0, 0)
+
+	rasterize_mod.rasterize_into(
+		state._pixel_buf,
 		vertices,
 		vertex_count,
 		width,
@@ -50,13 +81,47 @@ const function draw_squircle(params: SquircleParams)
 		1 - transparency
 	)
 
-	params.image:WritePixelsBuffer(
+	state._image:WritePixelsBuffer(
 		Vector2.new(0, 0),
 		Vector2.new(width, height),
-		pixel_buf
+		state._pixel_buf
 	)
 end
 
+const function create(params: CreateParams): Squircle
+	const width = params.width
+	const height = params.height
+
+	local state: SquircleState = {
+		_image = AssetService:CreateEditableImage({ Size = Vector2.new(width, height) }),
+		_pixel_buf = buffer.create(width * height * 4),
+		_width = width,
+		_height = height,
+	}
+
+	render(state, params)
+
+	const squircle: Squircle = {
+		redraw = function(self: Squircle, new_params: RedrawParams)
+			render(state, new_params)
+		end,
+
+		get_image = function(self: Squircle): EditableImage
+			return state._image
+		end,
+
+		get_content = function(self: Squircle): Content
+			return Content.fromObject(state._image)
+		end,
+
+		destroy = function(self: Squircle)
+			state._image:Destroy()
+		end,
+	}
+
+	return squircle
+end
+
 return {
-	draw_squircle = draw_squircle,
+	create = create,
 }
