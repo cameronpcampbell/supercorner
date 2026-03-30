@@ -37,11 +37,15 @@ const function flatten(ops: { SvgOp }, tolerance: number): (buffer, number)
 		cur_y = y
 	end
 
+	const tol_sq = tolerance * tolerance
+	const MAX_DEPTH = 16
+
 	const function flatten_cubic(
 		x0: number, y0: number,
 		x1: number, y1: number,
 		x2: number, y2: number,
-		x3: number, y3: number
+		x3: number, y3: number,
+		depth: number
 	)
 		const dx = x3 - x0
 		const dy = y3 - y0
@@ -64,9 +68,12 @@ const function flatten(ops: { SvgOp }, tolerance: number): (buffer, number)
 		const py2 = y0 + t2 * dy - y2
 		const d2_sq = px2 * px2 + py2 * py2
 
-		const tol_sq = tolerance * tolerance
-
 		if d1_sq <= tol_sq and d2_sq <= tol_sq then
+			emit(x3, y3)
+			return
+		end
+
+		if depth >= MAX_DEPTH then
 			emit(x3, y3)
 			return
 		end
@@ -86,8 +93,8 @@ const function flatten(ops: { SvgOp }, tolerance: number): (buffer, number)
 		const mx = (m012x + m123x) * 0.5
 		const my = (m012y + m123y) * 0.5
 
-		flatten_cubic(x0, y0, m01x, m01y, m012x, m012y, mx, my)
-		flatten_cubic(mx, my, m123x, m123y, m23x, m23y, x3, y3)
+		flatten_cubic(x0, y0, m01x, m01y, m012x, m012y, mx, my, depth + 1)
+		flatten_cubic(mx, my, m123x, m123y, m23x, m23y, x3, y3, depth + 1)
 	end
 
 	-- SVG endpoint-to-center arc conversion (per SVG spec F.6.5–F.6.6)
@@ -168,13 +175,24 @@ const function flatten(ops: { SvgOp }, tolerance: number): (buffer, number)
 		const num_steps = math.max(4, math.ceil(math.abs(dtheta) * max_r / tolerance))
 		const step = dtheta / num_steps
 
+		const cos_step = math.cos(step)
+		const sin_step = math.sin(step)
+
+		const crx = cos_phi * rx
+		const sry = sin_phi * ry
+		const srx = sin_phi * rx
+		const cry = cos_phi * ry
+
+		local cos_a = math.cos(theta1)
+		local sin_a = math.sin(theta1)
+
 		for i = 1, num_steps do
-			const angle = theta1 + i * step
-			const cos_a = math.cos(angle)
-			const sin_a = math.sin(angle)
-			const px = cos_phi * rx * cos_a - sin_phi * ry * sin_a + center_x
-			const py = sin_phi * rx * cos_a + cos_phi * ry * sin_a + center_y
-			emit(px, py)
+			const next_cos = cos_a * cos_step - sin_a * sin_step
+			const next_sin = sin_a * cos_step + cos_a * sin_step
+			cos_a = next_cos
+			sin_a = next_sin
+
+			emit(crx * cos_a - sry * sin_a + center_x, srx * cos_a + cry * sin_a + center_y)
 		end
 	end
 
@@ -192,7 +210,8 @@ const function flatten(ops: { SvgOp }, tolerance: number): (buffer, number)
 				x0, y0,
 				x0 + op.dx1, y0 + op.dy1,
 				x0 + op.dx2, y0 + op.dy2,
-				x0 + op.dx, y0 + op.dy
+				x0 + op.dx, y0 + op.dy,
+				0
 			)
 		elseif op.type == "a" then
 			flatten_arc(

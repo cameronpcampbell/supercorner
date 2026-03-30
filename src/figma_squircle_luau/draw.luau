@@ -225,7 +225,7 @@ const function get_svg_ops(input: SvgPathInput): { SvgOp }
 	const br = input.bottom_right_path_params
 	const bl = input.bottom_left_path_params
 
-	local ops: { SvgOp } = {}
+	local ops: { SvgOp } = table.create(21)
 
 	table.insert(ops, {
 		type = "M" :: "M",
@@ -239,9 +239,8 @@ const function get_svg_ops(input: SvgPathInput): { SvgOp }
 		y = 0,
 	})
 
-	for _, op in top_right_ops(tr) do
-		table.insert(ops, op)
-	end
+	const tr_ops = top_right_ops(tr)
+	table.move(tr_ops, 1, #tr_ops, #ops + 1, ops)
 
 	table.insert(ops, {
 		type = "L" :: "L",
@@ -249,9 +248,8 @@ const function get_svg_ops(input: SvgPathInput): { SvgOp }
 		y = height - br.p,
 	})
 
-	for _, op in bottom_right_ops(br) do
-		table.insert(ops, op)
-	end
+	const br_ops = bottom_right_ops(br)
+	table.move(br_ops, 1, #br_ops, #ops + 1, ops)
 
 	table.insert(ops, {
 		type = "L" :: "L",
@@ -259,9 +257,8 @@ const function get_svg_ops(input: SvgPathInput): { SvgOp }
 		y = height,
 	})
 
-	for _, op in bottom_left_ops(bl) do
-		table.insert(ops, op)
-	end
+	const bl_ops = bottom_left_ops(bl)
+	table.move(bl_ops, 1, #bl_ops, #ops + 1, ops)
 
 	table.insert(ops, {
 		type = "L" :: "L",
@@ -269,9 +266,8 @@ const function get_svg_ops(input: SvgPathInput): { SvgOp }
 		y = tl.p,
 	})
 
-	for _, op in top_left_ops(tl) do
-		table.insert(ops, op)
-	end
+	const tl_ops = top_left_ops(tl)
+	table.move(tl_ops, 1, #tl_ops, #ops + 1, ops)
 
 	table.insert(ops, { type = "Z" :: "Z" })
 
