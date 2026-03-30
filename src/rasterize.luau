@@ -295,71 +295,35 @@ local function rasterize_into(
             -- Accumulate coverage and write pixels
             if scan_x_min <= scan_x_max then
                 local sum = 0.0
-                local interior_start = -1
+                local solid_run_start = -1
 
-                -- Left edge: pixel-by-pixel AA until we hit solid interior
                 for px = scan_x_min, scan_x_max do
                     const off = px * 4
-                    const area = buffer.readf32(area_buf, off)
-                    const fill = buffer.readf32(fill_buf, off)
-                    const coverage = math.min(math.abs(area + sum), 1)
-                    sum += fill
+                    const coverage = math.min(math.abs(buffer.readf32(area_buf, off) + sum), 1)
+                    sum += buffer.readf32(fill_buf, off)
 
-                    if coverage <= 0 then
+                    if coverage >= 1 then
+                        if solid_run_start < 0 then
+                            solid_run_start = px
+                        end
                         continue
                     end
 
-                    if coverage >= 1 and area == 0 and fill == 0 then
-                        interior_start = px
-                        break
+                    -- Flush any solid run before this non-solid pixel
+                    if solid_run_start >= 0 then
+                        fill_interior(pixel_buf, row_offset + solid_run_start * 4, px - solid_run_start, color_u32)
+                        solid_run_start = -1
                     end
 
-                    if coverage >= 1 then
-                        buffer.writeu32(pixel_buf, row_offset + off, color_u32)
-                    else
+                    if coverage > 0 then
                         const aa_alpha = math.floor(ab * coverage + 0.5)
                         buffer.writeu32(pixel_buf, row_offset + off, color_rgb + aa_alpha * 0x1000000)
                     end
                 end
 
-                -- Interior + right edge
-                if interior_start >= 0 then
-                    -- Find right edge start by scanning backward past edge pixels
-                    local right_edge_start = interior_start
-
-                    for px = scan_x_max, interior_start, -1 do
-                        const off = px * 4
-                        if buffer.readf32(area_buf, off) == 0 and buffer.readf32(fill_buf, off) == 0 then
-                            right_edge_start = px + 1
-                            break
-                        end
-                    end
-
-                    -- Fast-fill the solid interior
-                    const interior_span = right_edge_start - interior_start
-                    if interior_span > 0 then
-                        fill_interior(pixel_buf, row_offset + interior_start * 4, interior_span, color_u32)
-                    end
-
-                    -- Right edge: pixel-by-pixel AA
-                    for px = right_edge_start, scan_x_max do
-                        const off = px * 4
-                        const area = buffer.readf32(area_buf, off)
-                        const fill = buffer.readf32(fill_buf, off)
-                        const coverage = math.min(math.abs(area + sum), 1)
-                        sum += fill
-
-                        if coverage <= 0 then
-                            continue
-                        end
-
-                        if coverage >= 1 then
-                            buffer.writeu32(pixel_buf, row_offset + off, color_u32)
-                        else
-                            const aa_alpha = math.floor(ab * coverage + 0.5)
-                            buffer.writeu32(pixel_buf, row_offset + off, color_rgb + aa_alpha * 0x1000000)
-                        end
-                    end
+                -- Flush trailing solid run
+                if solid_run_start >= 0 then
+                    fill_interior(pixel_buf, row_offset + solid_run_start * 4, scan_x_max - solid_run_start + 1, color_u32)
                 end
             end
 
