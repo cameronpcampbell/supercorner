@@ -2,6 +2,10 @@
 
 A Figma-inspired UICorner alternative for Roblox.
 
+Benefits to SuperCorner:
+- Supports individual corner radii.
+- Supports corner smoothing (squircle).
+
 ## Disclaimer
 
 > This library is not an official product from the Figma team and does not guarantee to produce the same results as you would get in Figma.
