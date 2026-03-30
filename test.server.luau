@@ -26,7 +26,7 @@ uicornerplus.draw_squircle({
 	-- high ddi screens look crisp.
 	width = SIZE * 2,
 	height = SIZE * 2,
-	cornerRadius = 120,
+	cornerRadius = 100,
 	cornerSmoothing = 1,
 	color = Color3.fromRGB(0, 0, 0),
 })

@@ -79,8 +79,8 @@ const function top_right_ops(pp: CornerPathParams): { SvgOp }
 
 		{
 			type = "a" :: "a",
-			rx = pp.arcSectionLength,
-			ry = pp.arcSectionLength,
+			rx = pp.cornerRadius,
+			ry = pp.cornerRadius,
 			rotation = 0,
 			largeArc = 0,
 			sweep = 1,
@@ -118,8 +118,8 @@ const function bottom_right_ops(pp: CornerPathParams): { SvgOp }
 
 		{
 			type = "a" :: "a",
-			rx = pp.arcSectionLength,
-			ry = pp.arcSectionLength,
+			rx = pp.cornerRadius,
+			ry = pp.cornerRadius,
 			rotation = 0,
 			largeArc = 0,
 			sweep = 1,
@@ -157,8 +157,8 @@ const function bottom_left_ops(pp: CornerPathParams): { SvgOp }
 
 		{
 			type = "a" :: "a",
-			rx = pp.arcSectionLength,
-			ry = pp.arcSectionLength,
+			rx = pp.cornerRadius,
+			ry = pp.cornerRadius,
 			rotation = 0,
 			largeArc = 0,
 			sweep = 1,
@@ -196,8 +196,8 @@ const function top_left_ops(pp: CornerPathParams): { SvgOp }
 
 		{
 			type = "a" :: "a",
-			rx = pp.arcSectionLength,
-			ry = pp.arcSectionLength,
+			rx = pp.cornerRadius,
+			ry = pp.cornerRadius,
 			rotation = 0,
 			largeArc = 0,
 			sweep = 1,
