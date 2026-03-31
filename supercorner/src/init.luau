@@ -97,6 +97,26 @@ const function render(state: SquircleState, params: RedrawParams)
 	)
 end
 
+local function CalcSizeFromCorners(params: RedrawParams): Vector2
+	local smoothing = math.min(params.CornerSmoothing, 1 - 1e-6)
+	local default_r = params.CornerRadius
+	local tl_r = params.TopLeftCornerRadius or default_r
+	local tr_r = params.TopRightCornerRadius or default_r
+	local br_r = params.BottomRightCornerRadius or default_r
+	local bl_r = params.BottomLeftCornerRadius or default_r
+
+	local factor = 1 + smoothing
+	local tl_p = tl_r * factor
+	local tr_p = tr_r * factor
+	local br_p = br_r * factor
+	local bl_p = bl_r * factor
+
+	return Vector2.new(
+		math.max(1, math.ceil(math.max(tl_p + tr_p, bl_p + br_p))),
+		math.max(1, math.ceil(math.max(tl_p + bl_p, tr_p + br_p)))
+	)
+end
+
 const function new(params: CreateParams): Squircle
 	const width, height = params.Width * 2, params.Height * 2
 
@@ -128,4 +148,5 @@ end
 
 return {
 	new = new,
+	CalcSizeFromCorners = CalcSizeFromCorners,
 }
