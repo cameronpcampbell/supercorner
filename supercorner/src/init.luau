@@ -225,7 +225,16 @@ const function new(params: CreateParams): Squircle
 	return squircle
 end
 
+local function GetCacheSize(): number
+	local count = 0
+	for _ in Cache do
+		count += 1
+	end
+	return count
+end
+
 return {
 	new = new,
 	CalcSizeFromCorners = CalcSizeFromCorners,
+	GetCacheSize = GetCacheSize,
 }
