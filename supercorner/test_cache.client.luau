@@ -48,6 +48,7 @@ GridLayout.SortOrder = Enum.SortOrder.LayoutOrder
 GridLayout.Parent = GridContainer
 
 local squircles: { Supercorner.Squircle } = {}
+local imageLabels: { ImageLabel } = {}
 local contents: { Content } = {}
 
 for i = 1, GRID_COLS * GRID_ROWS do
@@ -66,6 +67,7 @@ for i = 1, GRID_COLS * GRID_ROWS do
 	imageLabel.Parent = GridContainer
 
 	table.insert(squircles, squircle)
+	table.insert(imageLabels, imageLabel)
 	table.insert(contents, squircle:GetContent())
 end
 
@@ -93,3 +95,21 @@ else
 end
 
 print(`[cache test] {count} squircles created, {cacheSize} cache entries`)
+
+-- Animate the first squircle's corner radius down to 0
+const RunService = game:GetService("RunService")
+local radius = CORNER_RADIUS
+
+while radius > 0 do
+	radius = math.max(0, radius - 1)
+
+	squircles[1]:Redraw({
+		CornerRadius = radius,
+		CornerSmoothing = CORNER_SMOOTHING,
+	})
+
+	imageLabels[1].ImageContent = squircles[1]:GetContent()
+	task.wait(0.05)
+end
+
+print(`[cache test] first squircle redraw complete, cache entries: {Supercorner.GetCacheSize()}`)
