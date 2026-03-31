@@ -75,7 +75,7 @@ const function render(state: SquircleState, params: RedrawParams)
 	})
 
 	const antiAlias = if params.AntiAlias ~= nil then params.AntiAlias else true
-	const tolerance = if antiAlias then 1/4 else 1/2
+	const tolerance = if antiAlias then 1/8 else 1/4
 	const vertices, vertex_count = Flatten(ops, tolerance)
 
 	buffer.fill(state.PixelBuf, 0, 0)
