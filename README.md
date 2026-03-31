@@ -17,32 +17,29 @@ Benefits to SuperCorner:
 ## Usage
 
 ```luau
-local supercorner = require(path.to.supercorner)
+local Supercorner = require(path.to.Supercorner)
 
--- Create a squircle
-local squircle = supercorner.create({
-	width = 200,
-	height = 200,
-	cornerRadius = 24,
-	cornerSmoothing = 0.6,
+local Squircle = Supercorner.new({
+	CornerRadius = 24,
+	CornerSmoothing = 0.6,
 })
 
--- Apply it to an ImageLabel
-local image_label = Instance.new("ImageLabel")
-image_label.ImageContent = squircle:get_content()
-image_label.Size = UDim2.fromOffset(200, 200)
-image_label.BackgroundTransparency = 1
-image_label.Parent = some_parent
+local ImageLabel = Instance.new("ImageLabel")
+ImageLabel.ImageContent = Squircle:GetContent()
+ImageLabel.ScaleType = Enum.ScaleType.Slice
+ImageLabel.Size = UDim2.fromOffset(200, 200)
+ImageLabel.BackgroundTransparency = 1
+ImageLabel.Parent = some_parent
 
 -- Update corners later
-squircle:redraw({
-	cornerRadius = 32,
-	cornerSmoothing = 0.8,
-	topLeftCornerRadius = 16,
-	topRightCornerRadius = 16,
+Squircle:Redraw({
+	CornerRadius = 32,
+	CornerSmoothing = 0.8,
+	TopLeftCornerRadius = 16,
+	TopRightCornerRadius = 16,
 })
-image_label.ImageContent = squircle:get_content()
+ImageLabel.ImageContent = Squircle:GetContent()
 
 -- Clean up when done
-squircle:destroy()
+Squircle:Destroy()
 ```

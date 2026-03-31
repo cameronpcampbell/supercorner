@@ -1,14 +1,14 @@
 --!strict
 
-local RepStorage = game:GetService("ReplicatedStorage")
-local UserInputService = game:GetService("UserInputService")
-local Players = game:GetService("Players")
+const RepStorage = game:GetService("ReplicatedStorage")
+const UserInputService = game:GetService("UserInputService")
+const Players = game:GetService("Players")
 
-local supercorner = require(RepStorage.supercorner)
+const Supercorner = require(RepStorage.supercorner)
 
-local SIZE = 200
-local SLIDER_HEIGHT = 40
-local GAP = 80
+const SIZE = 200
+const SLIDER_HEIGHT = 40
+const GAP = 80
 
 const ScreenGui = Instance.new("ScreenGui")
 ScreenGui.IgnoreGuiInset = true
@@ -100,7 +100,7 @@ local TopRightCornerRadius: number? = nil
 local BottomRightCornerRadius: number? = nil
 local BottomLeftCornerRadius: number? = nil
 
-const squircle = supercorner.new({
+const squircle = Supercorner.new({
 	Width = SIZE,
 	Height = SIZE,
 	CornerRadius = CornerRadius,
