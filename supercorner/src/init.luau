@@ -1,4 +1,5 @@
 --!strict
+--!nolint LocalShadow
 
 const FigmaSquircle = require("@self/figma_squircle_luau")
 const Flatten = require("@self/flatten")
@@ -42,6 +43,29 @@ type SquircleState = {
 	Width: number,
 	Height: number,
 }
+
+type CacheEntry = {
+	state: SquircleState,
+	refCount: number,
+	key: string,
+}
+
+const Cache: { [string]: CacheEntry } = {}
+const CacheKeyBuf = buffer.create(66)
+
+const function GetCacheKey(params: CreateParams): string
+	buffer.writef64(CacheKeyBuf, 0, params.Width * 2)
+	buffer.writef64(CacheKeyBuf, 8, params.Height * 2)
+	buffer.writef64(CacheKeyBuf, 16, params.CornerRadius)
+	buffer.writef64(CacheKeyBuf, 24, params.CornerSmoothing)
+	buffer.writef64(CacheKeyBuf, 32, if params.TopLeftCornerRadius ~= nil then params.TopLeftCornerRadius else -1)
+	buffer.writef64(CacheKeyBuf, 40, if params.TopRightCornerRadius ~= nil then params.TopRightCornerRadius else -1)
+	buffer.writef64(CacheKeyBuf, 48, if params.BottomRightCornerRadius ~= nil then params.BottomRightCornerRadius else -1)
+	buffer.writef64(CacheKeyBuf, 56, if params.BottomLeftCornerRadius ~= nil then params.BottomLeftCornerRadius else -1)
+	buffer.writeu8(CacheKeyBuf, 64, if params.PreserveSmoothing then 1 else 0)
+	buffer.writeu8(CacheKeyBuf, 65, if params.AntiAlias == false then 0 else 1)
+	return buffer.tostring(CacheKeyBuf)
+end
 
 const function render(state: SquircleState, params: RedrawParams)
 	const width, height = state.Width, state.Height
@@ -118,19 +142,59 @@ local function CalcSizeFromCorners(params: RedrawParams): Vector2
 end
 
 const function new(params: CreateParams): Squircle
-	const width, height = params.Width * 2, params.Height * 2
+	local cacheKey = GetCacheKey(params)
+	local entry: CacheEntry? = Cache[cacheKey]
 
-	local state: SquircleState = {
-		EImage = AssetService:CreateEditableImage({ Size = Vector2.new(width, height) }),
-		PixelBuf = buffer.create(width * height * 4),
-		Width = width,
-		Height = height,
-	}
+	if entry == nil then
+		local width, height = params.Width * 2, params.Height * 2
 
-	render(state, params)
+		local state: SquircleState = {
+			EImage = AssetService:CreateEditableImage({ Size = Vector2.new(width, height) }),
+			PixelBuf = buffer.create(width * height * 4),
+			Width = width,
+			Height = height,
+		}
 
-	const squircle: Squircle = {
+		render(state, params)
+
+		entry = {
+			state = state,
+			refCount = 0,
+			key = cacheKey,
+		}
+
+		Cache[cacheKey] = entry
+	end
+
+	local state: SquircleState = (entry :: CacheEntry).state
+	local destroyed = false
+
+	(entry :: CacheEntry).refCount += 1
+
+	local squircle: Squircle = {
 		Redraw = function(self: Squircle, new_params: RedrawParams)
+			if destroyed then return end
+
+			if entry ~= nil then
+				entry.refCount -= 1
+
+				if entry.refCount == 0 then
+					Cache[entry.key] = nil
+
+				else
+					local width, height = state.Width, state.Height
+
+					state = {
+						EImage = AssetService:CreateEditableImage({ Size = Vector2.new(width, height) }),
+						PixelBuf = buffer.create(width * height * 4),
+						Width = width,
+						Height = height,
+					}
+				end
+
+				entry = nil
+			end
+
 			render(state, new_params)
 		end,
 
@@ -139,7 +203,22 @@ const function new(params: CreateParams): Squircle
 		end,
 
 		Destroy = function(self: Squircle)
-			state.EImage:Destroy()
+			if destroyed then return end
+			destroyed = true
+
+			if entry ~= nil then
+				entry.refCount -= 1
+
+				if entry.refCount == 0 then
+					Cache[entry.key] = nil
+					state.EImage:Destroy()
+				end
+
+				entry = nil
+			else
+
+				state.EImage:Destroy()
+			end
 		end,
 	}
 
