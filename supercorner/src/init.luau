@@ -176,17 +176,15 @@ const function new(params: CreateParams): Squircle
 
 			local newKey = GetCacheKey(width, height, new_params)
 
-			-- Already on this exact cache entry
 			if entry ~= nil and entry.key == newKey then return end
 
-			-- Check if new params match an existing cache entry
 			local newEntry = Cache[newKey]
 
 			if newEntry ~= nil then
-				-- New params already cached — reuse it
 				local oldEImage = state.EImage
 				local ownsOldState = entry == nil or entry.refCount == 1
 
+				-- Detach from current entry
 				if entry ~= nil then
 					entry.refCount -= 1
 					if entry.refCount == 0 then
@@ -194,19 +192,23 @@ const function new(params: CreateParams): Squircle
 					end
 				end
 
-				entry = newEntry
-				entry.refCount += 1
-				state = entry.state
+				-- Attach to existing entry
+				local newEntry = newEntry :: CacheEntry
+				newEntry.refCount += 1
+				state = newEntry.state
 
+				-- Clean up old EImage if we were the sole owner
 				if ownsOldState and oldEImage ~= state.EImage then
 					oldEImage:Destroy()
 				end
+
 			else
-				-- New params not cached — render and cache
+				-- Detach from current entry, clone if shared
 				if entry ~= nil then
 					entry.refCount -= 1
 					if entry.refCount == 0 then
 						Cache[entry.key] = nil
+
 					else
 						state = {
 							EImage = AssetService:CreateEditableImage({ Size = Vector2.new(width, height) }),

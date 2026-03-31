@@ -97,7 +97,6 @@ end
 print(`[cache test] {count} squircles created, {cacheSize} cache entries`)
 
 -- Animate the first squircle's corner radius down to 0
-const RunService = game:GetService("RunService")
 local radius = CORNER_RADIUS
 
 while radius > 0 do
