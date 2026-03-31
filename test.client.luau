@@ -102,7 +102,7 @@ const squircle = supercorner.create({
 	width = SIZE,
 	height = SIZE,
 	cornerRadius = corner_radius,
-	cornerSmoothing = corner_smoothing,
+	cornerSmoothing = corner_smoothing
 })
 
 image_label.ImageColor3 = Color3.fromRGB(120, 108, 70)
@@ -115,7 +115,7 @@ local function redraw()
 		topLeftCornerRadius = top_left_radius,
 		topRightCornerRadius = top_right_radius,
 		bottomRightCornerRadius = bottom_right_radius,
-		bottomLeftCornerRadius = bottom_left_radius,
+		bottomLeftCornerRadius = bottom_left_radius
 	})
 
 	image_label.ImageContent = squircle:get_content()

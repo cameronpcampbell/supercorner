@@ -48,11 +48,18 @@ const function render(state: SquircleState, params: RedrawParams)
 	const width = state._width
 	const height = state._height
 
+	-- Currently theres an issue with corners becoming degenerate under certain
+	-- conditions. I've found that one of the variables in this issue occuring
+	-- is the corner smoothing being `1`. So by clamping to some value just before
+	-- that we can mitigate this issue whilst still perceptually allowing for a
+	-- smoothing factor of `1`.
+	local clamped_smoothing = math.min(params.cornerSmoothing, 1 - 1e-6)
+
 	const ops = figma_squircle.get_svg_path({
 		width = width,
 		height = height,
 		cornerRadius = params.cornerRadius * 2,
-		cornerSmoothing = params.cornerSmoothing,
+		cornerSmoothing = clamped_smoothing,
 		topLeftCornerRadius = if params.topLeftCornerRadius then params.topLeftCornerRadius * 2 else nil,
 		topRightCornerRadius = if params.topRightCornerRadius then params.topRightCornerRadius * 2 else nil,
 		bottomRightCornerRadius = if params.bottomRightCornerRadius then params.bottomRightCornerRadius * 2 else nil,
