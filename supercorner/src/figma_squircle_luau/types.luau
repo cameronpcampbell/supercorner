@@ -61,13 +61,6 @@ export type CornerPathParams = {
 	arcSectionLength: number,
 }
 
-export type CornerParams = {
-	cornerRadius: number,
-	cornerSmoothing: number,
-	preserveSmoothing: boolean,
-	roundingAndSmoothingBudget: number,
-}
-
 export type NormalizedCorner = {
 	radius: number,
 	roundingAndSmoothingBudget: number,

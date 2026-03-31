@@ -6,7 +6,6 @@ const draw = require("@self/draw")
 
 export type FigmaSquircleParams = types.FigmaSquircleParams
 export type SvgOp = types.SvgOp
-export type CornerParams = types.CornerParams
 
 const function get_svg_path(params: FigmaSquircleParams): { SvgOp }
 	const width = params.width
@@ -23,18 +22,12 @@ const function get_svg_path(params: FigmaSquircleParams): { SvgOp }
 	const all_equal = tl_radius == tr_radius and tr_radius == br_radius and br_radius == bl_radius
 
 	if all_equal then
-		const normalized = distribute.distribute_and_normalize(
-			width, height, tl_radius, tr_radius, br_radius, bl_radius
+		const budget = math.min(width, height) / 2
+		const radius = math.min(tl_radius, budget)
+
+		const path_params = draw.get_path_params_for_corner(
+			radius, corner_smoothing, preserve_smoothing, budget
 		)
-
-		const corner_params: CornerParams = {
-			cornerRadius = normalized.topLeft.radius,
-			cornerSmoothing = corner_smoothing,
-			preserveSmoothing = preserve_smoothing,
-			roundingAndSmoothingBudget = normalized.topLeft.roundingAndSmoothingBudget,
-		}
-
-		const path_params = draw.get_path_params_for_corner(corner_params)
 
 		return draw.get_svg_ops({
 			width = width,
@@ -50,33 +43,25 @@ const function get_svg_path(params: FigmaSquircleParams): { SvgOp }
 		width, height, tl_radius, tr_radius, br_radius, bl_radius
 	)
 
-	const tl_path_params = draw.get_path_params_for_corner({
-		cornerRadius = normalized.topLeft.radius,
-		cornerSmoothing = corner_smoothing,
-		preserveSmoothing = preserve_smoothing,
-		roundingAndSmoothingBudget = normalized.topLeft.roundingAndSmoothingBudget,
-	})
+	const tl_path_params = draw.get_path_params_for_corner(
+		normalized.topLeft.radius, corner_smoothing, preserve_smoothing,
+		normalized.topLeft.roundingAndSmoothingBudget
+	)
 
-	const tr_path_params = draw.get_path_params_for_corner({
-		cornerRadius = normalized.topRight.radius,
-		cornerSmoothing = corner_smoothing,
-		preserveSmoothing = preserve_smoothing,
-		roundingAndSmoothingBudget = normalized.topRight.roundingAndSmoothingBudget,
-	})
+	const tr_path_params = draw.get_path_params_for_corner(
+		normalized.topRight.radius, corner_smoothing, preserve_smoothing,
+		normalized.topRight.roundingAndSmoothingBudget
+	)
 
-	const br_path_params = draw.get_path_params_for_corner({
-		cornerRadius = normalized.bottomRight.radius,
-		cornerSmoothing = corner_smoothing,
-		preserveSmoothing = preserve_smoothing,
-		roundingAndSmoothingBudget = normalized.bottomRight.roundingAndSmoothingBudget,
-	})
+	const br_path_params = draw.get_path_params_for_corner(
+		normalized.bottomRight.radius, corner_smoothing, preserve_smoothing,
+		normalized.bottomRight.roundingAndSmoothingBudget
+	)
 
-	const bl_path_params = draw.get_path_params_for_corner({
-		cornerRadius = normalized.bottomLeft.radius,
-		cornerSmoothing = corner_smoothing,
-		preserveSmoothing = preserve_smoothing,
-		roundingAndSmoothingBudget = normalized.bottomLeft.roundingAndSmoothingBudget,
-	})
+	const bl_path_params = draw.get_path_params_for_corner(
+		normalized.bottomLeft.radius, corner_smoothing, preserve_smoothing,
+		normalized.bottomLeft.roundingAndSmoothingBudget
+	)
 
 	return draw.get_svg_ops({
 		width = width,

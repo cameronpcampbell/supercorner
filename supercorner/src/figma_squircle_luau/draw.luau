@@ -3,7 +3,6 @@
 const types = require("./types")
 
 type CornerPathParams = types.CornerPathParams
-type CornerParams = types.CornerParams
 type SvgOp = types.SvgOp
 
 type SvgPathInput = {
@@ -15,26 +14,28 @@ type SvgPathInput = {
 	bottom_left_path_params: CornerPathParams,
 }
 
-const function get_path_params_for_corner(params: CornerParams): CornerPathParams
-	const corner_radius = params.cornerRadius
-	local corner_smoothing = params.cornerSmoothing
-	const preserve_smoothing = params.preserveSmoothing
-	const rounding_and_smoothing_budget = params.roundingAndSmoothingBudget
+const function get_path_params_for_corner(
+	corner_radius: number,
+	corner_smoothing: number,
+	preserve_smoothing: boolean,
+	rounding_and_smoothing_budget: number
+): CornerPathParams
+	local smoothing = corner_smoothing
 
-	local p = (1.0 + corner_smoothing) * corner_radius
+	local p = (1.0 + smoothing) * corner_radius
 
 	if not preserve_smoothing then
 		const max_corner_smoothing = rounding_and_smoothing_budget / corner_radius - 1.0
-		corner_smoothing = math.min(corner_smoothing, max_corner_smoothing)
+		smoothing = math.min(smoothing, max_corner_smoothing)
 		p = math.min(p, rounding_and_smoothing_budget)
 	end
 
-	const arc_measure = 90.0 * (1.0 - corner_smoothing)
+	const arc_measure = 90.0 * (1.0 - smoothing)
 	const arc_section_length = math.sin(math.rad(arc_measure / 2.0)) * corner_radius * math.sqrt(2)
 
 	const angle_alpha = (90.0 - arc_measure) / 2.0
 	const p3_to_p4_distance = corner_radius * math.tan(math.rad(angle_alpha / 2.0))
-	const angle_beta = 45.0 * corner_smoothing
+	const angle_beta = 45.0 * smoothing
 	const c = p3_to_p4_distance * math.cos(math.rad(angle_beta))
 	const d = c * math.tan(math.rad(angle_beta))
 
@@ -61,160 +62,41 @@ const function get_path_params_for_corner(params: CornerParams): CornerPathParam
 	}
 end
 
-const function top_right_ops(pp: CornerPathParams): { SvgOp }
+-- Inserts the 3 corner ops (cubic, arc, cubic) directly into the ops array.
+-- Each corner has a unique sign pattern applied to (a, b, c, d, arcSectionLength).
+local function insert_corner_ops(ops: { SvgOp }, pp: CornerPathParams, corner: number)
 	if pp.cornerRadius == 0 then
-		return {}
+		return
 	end
 
-	return {
-		{
-			type = "c" :: "c",
-			dx1 = pp.a,
-			dy1 = 0,
-			dx2 = pp.a + pp.b,
-			dy2 = 0,
-			dx = pp.a + pp.b + pp.c,
-			dy = pp.d,
-		},
+	local a, b, c, d = pp.a, pp.b, pp.c, pp.d
+	local arc = pp.arcSectionLength
+	local r = pp.cornerRadius
+	local ab = a + b
+	local abc = ab + c
+	local cb = c + b
+	local cba = cb + a
 
-		{
-			type = "a" :: "a",
-			rx = pp.cornerRadius,
-			ry = pp.cornerRadius,
-			rotation = 0,
-			largeArc = 0,
-			sweep = 1,
-			dx = pp.arcSectionLength,
-			dy = pp.arcSectionLength,
-		} :: SvgOp,
+	if corner == 1 then -- top right
+		table.insert(ops, { type = "c" :: "c", dx1 = a, dy1 = 0, dx2 = ab, dy2 = 0, dx = abc, dy = d })
+		table.insert(ops, { type = "a" :: "a", rx = r, ry = r, rotation = 0, largeArc = 0, sweep = 1, dx = arc, dy = arc } :: SvgOp)
+		table.insert(ops, { type = "c" :: "c", dx1 = d, dy1 = c, dx2 = d, dy2 = cb, dx = d, dy = cba })
 
-		{
-			type = "c" :: "c",
-			dx1 = pp.d,
-			dy1 = pp.c,
-			dx2 = pp.d,
-			dy2 = pp.c + pp.b,
-			dx = pp.d,
-			dy = pp.c + pp.b + pp.a,
-		},
-	}
-end
+	elseif corner == 2 then -- bottom right
+		table.insert(ops, { type = "c" :: "c", dx1 = 0, dy1 = a, dx2 = 0, dy2 = ab, dx = -d, dy = abc })
+		table.insert(ops, { type = "a" :: "a", rx = r, ry = r, rotation = 0, largeArc = 0, sweep = 1, dx = -arc, dy = arc } :: SvgOp)
+		table.insert(ops, { type = "c" :: "c", dx1 = -c, dy1 = d, dx2 = -cb, dy2 = d, dx = -cba, dy = d })
 
-const function bottom_right_ops(pp: CornerPathParams): { SvgOp }
-	if pp.cornerRadius == 0 then
-		return {}
+	elseif corner == 3 then -- bottom left
+		table.insert(ops, { type = "c" :: "c", dx1 = -a, dy1 = 0, dx2 = -ab, dy2 = 0, dx = -abc, dy = -d })
+		table.insert(ops, { type = "a" :: "a", rx = r, ry = r, rotation = 0, largeArc = 0, sweep = 1, dx = -arc, dy = -arc } :: SvgOp)
+		table.insert(ops, { type = "c" :: "c", dx1 = -d, dy1 = -c, dx2 = -d, dy2 = -cb, dx = -d, dy = -cba })
+
+	else -- top left
+		table.insert(ops, { type = "c" :: "c", dx1 = 0, dy1 = -a, dx2 = 0, dy2 = -ab, dx = d, dy = -abc })
+		table.insert(ops, { type = "a" :: "a", rx = r, ry = r, rotation = 0, largeArc = 0, sweep = 1, dx = arc, dy = -arc } :: SvgOp)
+		table.insert(ops, { type = "c" :: "c", dx1 = c, dy1 = -d, dx2 = cb, dy2 = -d, dx = cba, dy = -d })
 	end
-
-	return {
-		{
-			type = "c" :: "c",
-			dx1 = 0,
-			dy1 = pp.a,
-			dx2 = 0,
-			dy2 = pp.a + pp.b,
-			dx = -pp.d,
-			dy = pp.a + pp.b + pp.c,
-		},
-
-		{
-			type = "a" :: "a",
-			rx = pp.cornerRadius,
-			ry = pp.cornerRadius,
-			rotation = 0,
-			largeArc = 0,
-			sweep = 1,
-			dx = -pp.arcSectionLength,
-			dy = pp.arcSectionLength,
-		} :: SvgOp,
-
-		{
-			type = "c" :: "c",
-			dx1 = -pp.c,
-			dy1 = pp.d,
-			dx2 = -(pp.c + pp.b),
-			dy2 = pp.d,
-			dx = -(pp.c + pp.b + pp.a),
-			dy = pp.d,
-		},
-	}
-end
-
-const function bottom_left_ops(pp: CornerPathParams): { SvgOp }
-	if pp.cornerRadius == 0 then
-		return {}
-	end
-
-	return {
-		{
-			type = "c" :: "c",
-			dx1 = -pp.a,
-			dy1 = 0,
-			dx2 = -(pp.a + pp.b),
-			dy2 = 0,
-			dx = -(pp.a + pp.b + pp.c),
-			dy = -pp.d,
-		},
-
-		{
-			type = "a" :: "a",
-			rx = pp.cornerRadius,
-			ry = pp.cornerRadius,
-			rotation = 0,
-			largeArc = 0,
-			sweep = 1,
-			dx = -pp.arcSectionLength,
-			dy = -pp.arcSectionLength,
-		} :: SvgOp,
-
-		{
-			type = "c" :: "c",
-			dx1 = -pp.d,
-			dy1 = -pp.c,
-			dx2 = -pp.d,
-			dy2 = -(pp.c + pp.b),
-			dx = -pp.d,
-			dy = -(pp.c + pp.b + pp.a),
-		},
-	}
-end
-
-const function top_left_ops(pp: CornerPathParams): { SvgOp }
-	if pp.cornerRadius == 0 then
-		return {}
-	end
-
-	return {
-		{
-			type = "c" :: "c",
-			dx1 = 0,
-			dy1 = -pp.a,
-			dx2 = 0,
-			dy2 = -(pp.a + pp.b),
-			dx = pp.d,
-			dy = -(pp.a + pp.b + pp.c),
-		},
-
-		{
-			type = "a" :: "a",
-			rx = pp.cornerRadius,
-			ry = pp.cornerRadius,
-			rotation = 0,
-			largeArc = 0,
-			sweep = 1,
-			dx = pp.arcSectionLength,
-			dy = -pp.arcSectionLength,
-		} :: SvgOp,
-
-		{
-			type = "c" :: "c",
-			dx1 = pp.c,
-			dy1 = -pp.d,
-			dx2 = pp.c + pp.b,
-			dy2 = -pp.d,
-			dx = pp.c + pp.b + pp.a,
-			dy = -pp.d,
-		},
-	}
 end
 
 const function get_svg_ops(input: SvgPathInput): { SvgOp }
@@ -227,47 +109,18 @@ const function get_svg_ops(input: SvgPathInput): { SvgOp }
 
 	local ops: { SvgOp } = table.create(21) :: { SvgOp }
 
-	table.insert(ops, {
-		type = "M" :: "M",
-		x = tl.p,
-		y = 0,
-	})
+	table.insert(ops, { type = "M" :: "M", x = tl.p, y = 0 })
+	table.insert(ops, { type = "L" :: "L", x = width - tr.p, y = 0 })
+	insert_corner_ops(ops, tr, 1)
 
-	table.insert(ops, {
-		type = "L" :: "L",
-		x = width - tr.p,
-		y = 0,
-	})
+	table.insert(ops, { type = "L" :: "L", x = width, y = height - br.p })
+	insert_corner_ops(ops, br, 2)
 
-	const tr_ops = top_right_ops(tr)
-	table.move(tr_ops, 1, #tr_ops, #ops + 1, ops)
+	table.insert(ops, { type = "L" :: "L", x = bl.p, y = height })
+	insert_corner_ops(ops, bl, 3)
 
-	table.insert(ops, {
-		type = "L" :: "L",
-		x = width,
-		y = height - br.p,
-	})
-
-	const br_ops = bottom_right_ops(br)
-	table.move(br_ops, 1, #br_ops, #ops + 1, ops)
-
-	table.insert(ops, {
-		type = "L" :: "L",
-		x = bl.p,
-		y = height,
-	})
-
-	const bl_ops = bottom_left_ops(bl)
-	table.move(bl_ops, 1, #bl_ops, #ops + 1, ops)
-
-	table.insert(ops, {
-		type = "L" :: "L",
-		x = 0,
-		y = tl.p,
-	})
-
-	const tl_ops = top_left_ops(tl)
-	table.move(tl_ops, 1, #tl_ops, #ops + 1, ops)
+	table.insert(ops, { type = "L" :: "L", x = 0, y = tl.p })
+	insert_corner_ops(ops, tl, 4)
 
 	table.insert(ops, { type = "Z" :: "Z" })
 

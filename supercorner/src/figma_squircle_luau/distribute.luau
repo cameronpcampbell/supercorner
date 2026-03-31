@@ -1,51 +1,17 @@
 --!strict
 
-const types = require("./types")
+local types = require("./types")
 
-type NormalizedCorner = types.NormalizedCorner
 type NormalizedCorners = types.NormalizedCorners
 
-type CornerName = "topLeft" | "topRight" | "bottomLeft" | "bottomRight"
-type SideName = "top" | "left" | "bottom" | "right"
+-- Corner indices: 1=TL, 2=TR, 3=BR, 4=BL
+-- Adjacency (hardcoded):
+--   TL: TR via top(width),  BL via left(height)
+--   TR: TL via top(width),  BR via right(height)
+--   BR: BL via bottom(width), TR via right(height)
+--   BL: BR via bottom(width), TL via left(height)
 
-type Adjacent = {
-	corner: CornerName,
-	side: SideName,
-}
-
-type Adjacency = { Adjacent }
-
-const ADJACENTS: { [CornerName]: Adjacency } = {
-	topLeft = {
-		{ corner = "topRight", side = "top" },
-		{ corner = "bottomLeft", side = "left" },
-	},
-
-	topRight = {
-		{ corner = "topLeft", side = "top" },
-		{ corner = "bottomRight", side = "right" },
-	},
-
-	bottomLeft = {
-		{ corner = "bottomRight", side = "bottom" },
-		{ corner = "topLeft", side = "left" },
-	},
-
-	bottomRight = {
-		{ corner = "bottomLeft", side = "bottom" },
-		{ corner = "topRight", side = "right" },
-	},
-}
-
-const function get_side_length(side: SideName, width: number, height: number): number
-	return if side == "top" or side == "bottom" then width else height
-end
-
-const function get_corner_radius(corner: CornerName, radii: { [CornerName]: number }): number
-	return radii[corner] or 0
-end
-
-const function distribute_and_normalize(
+local function distribute_and_normalize(
 	width: number,
 	height: number,
 	top_left_radius: number,
@@ -53,66 +19,72 @@ const function distribute_and_normalize(
 	bottom_right_radius: number,
 	bottom_left_radius: number
 ): NormalizedCorners
-	local radii: { [CornerName]: number } = {
-		topLeft = top_left_radius,
-		topRight = top_right_radius,
-		bottomRight = bottom_right_radius,
-		bottomLeft = bottom_left_radius,
-	}
+	local r = { top_left_radius, top_right_radius, bottom_right_radius, bottom_left_radius }
+	local b = { -1.0, -1.0, -1.0, -1.0 }
 
-	local budgets: { [CornerName]: number } = {
-		topLeft = -1,
-		topRight = -1,
-		bottomRight = -1,
-		bottomLeft = -1,
-	}
+	-- Sort indices by radius descending (insertion sort, 4 elements)
+	local order = { 1, 2, 3, 4 }
 
-	local corner_names: { CornerName } = { "topLeft", "topRight", "bottomRight", "bottomLeft" }
-	table.sort(corner_names, function(a, b)
-		return get_corner_radius(a, radii) > get_corner_radius(b, radii)
-	end)
+	for i = 2, 4 do
+		local key = order[i]
+		local key_r = r[key]
+		local j = i - 1
 
-	for _, corner_name: CornerName in corner_names do
-		local radius = get_corner_radius(corner_name, radii)
-		local adjacents = ADJACENTS[corner_name]
-		local min_budget = math.huge
-
-		for _, adj in adjacents do
-			local adj_radius = get_corner_radius(adj.corner, radii)
-			local side_length = get_side_length(adj.side, width, height)
-			const budget = if radius == 0 and adj_radius == 0 then 0
-				elseif budgets[adj.corner] >= 0 then side_length - budgets[adj.corner]
-				else (radius / (radius + adj_radius)) * side_length
-
-			min_budget = math.min(min_budget, budget)
+		while j >= 1 and r[order[j]] < key_r do
+			order[j + 1] = order[j]
+			j -= 1
 		end
 
-		budgets[corner_name] = min_budget
+		order[j + 1] = key
+	end
+
+	for _, ci in order do
+		local radius = r[ci]
+
+		-- Look up two adjacent corners and their shared side lengths
+		local a1, s1, a2, s2
+		if ci == 1 then     a1, s1, a2, s2 = 2, width, 4, height     -- TL
+		elseif ci == 2 then a1, s1, a2, s2 = 1, width, 3, height     -- TR
+		elseif ci == 3 then a1, s1, a2, s2 = 4, width, 2, height     -- BR
+		else                a1, s1, a2, s2 = 3, width, 1, height end  -- BL
+
+		local adj1_r, adj1_b = r[a1], b[a1]
+		local budget1 = if radius == 0 and adj1_r == 0 then 0
+			elseif adj1_b >= 0 then s1 - adj1_b
+			else (radius / (radius + adj1_r)) * s1
+
+		local adj2_r, adj2_b = r[a2], b[a2]
+		local budget2 = if radius == 0 and adj2_r == 0 then 0
+			elseif adj2_b >= 0 then s2 - adj2_b
+			else (radius / (radius + adj2_r)) * s2
+
+		local min_budget = math.min(budget1, budget2)
+		b[ci] = min_budget
 
 		if radius > min_budget then
-			radii[corner_name] = min_budget
+			r[ci] = min_budget
 		end
 	end
 
 	return {
 		topLeft = {
-			radius = radii.topLeft,
-			roundingAndSmoothingBudget = budgets.topLeft,
+			radius = r[1],
+			roundingAndSmoothingBudget = b[1],
 		},
 
 		topRight = {
-			radius = radii.topRight,
-			roundingAndSmoothingBudget = budgets.topRight,
-		},
-
-		bottomLeft = {
-			radius = radii.bottomLeft,
-			roundingAndSmoothingBudget = budgets.bottomLeft,
+			radius = r[2],
+			roundingAndSmoothingBudget = b[2],
 		},
 
 		bottomRight = {
-			radius = radii.bottomRight,
-			roundingAndSmoothingBudget = budgets.bottomRight,
+			radius = r[3],
+			roundingAndSmoothingBudget = b[3],
+		},
+
+		bottomLeft = {
+			radius = r[4],
+			roundingAndSmoothingBudget = b[4],
 		},
 	}
 end
