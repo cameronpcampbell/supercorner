@@ -1,0 +1,126 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  preflight:
+    name: Preflight Checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Check wally.toml version matches tag
+        run: |
+          TAG="${{ github.ref_name }}"
+          WALLY_VERSION="v$(grep -m1 '^version' wally.toml | sed 's/.*"\(.*\)".*/\1/')"
+          if [ "$WALLY_VERSION" != "$TAG" ]; then
+            echo "::error::wally.toml version ($WALLY_VERSION) does not match tag ($TAG). Update the version in wally.toml before releasing."
+            exit 1
+          fi
+
+      - name: Check CHANGELOG.md has entry for this version
+        run: |
+          TAG="${{ github.ref_name }}"
+          if ! grep -q "^# $TAG" CHANGELOG.md; then
+            echo "::error::No changelog entry found for $TAG in CHANGELOG.md. Add a '# $TAG' section before releasing."
+            exit 1
+          fi
+
+  create-release:
+    name: Create Release
+    needs: preflight
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Create Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ github.ref_name }}"
+
+          # Extract changelog section for this version
+          CHANGELOG=$(awk -v tag="$TAG" '
+            BEGIN { found=0 }
+            /^# / {
+              if (found) exit
+              if ($0 == "# " tag) { found=1; next }
+            }
+            found { print }
+          ' CHANGELOG.md | sed '/./,$!d' | sed -e :a -e '/^\n*$/{$d;N;ba}')
+
+          if [ -z "$CHANGELOG" ]; then
+            echo "::error::No changelog entry found for $TAG in CHANGELOG.md"
+            exit 1
+          fi
+
+          # Increase heading levels by 1 (# -> ##, ## -> ###)
+          CHANGELOG=$(printf '%s' "$CHANGELOG" | sed 's/^#/##/')
+
+          # Strip leading 'v' for wally version URL
+          VERSION="${TAG#v}"
+          WALLY_URL="https://wally.run/package/cameronpcampbell/supercorner?version=${VERSION}"
+
+          cat > /tmp/release_body.md << EOF
+          # Changelog
+          ${CHANGELOG}
+
+          ---
+
+          # Wally
+          Install via [Wally](${WALLY_URL}):
+          \`\`\`toml
+          supercorner = "cameronpcampbell/supercorner@${VERSION}"
+          \`\`\`
+          EOF
+
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            echo "Release $TAG already exists. Updating."
+            gh release edit "$TAG" --draft --title "SuperCorner $TAG" --notes-file /tmp/release_body.md
+          else
+            gh release create "$TAG" --draft --verify-tag --title "SuperCorner $TAG" --notes-file /tmp/release_body.md
+          fi
+
+      - name: Rokit Cache Restore
+        id: cache-rokit
+        uses: actions/cache/restore@v5
+        with:
+          path: ~/.rokit
+          key: rokit-${{ hashFiles('rokit.toml') }}
+
+      - name: Install Rokit
+        if: steps.cache-rokit.outputs.cache-hit != 'true'
+        run: curl -fsSL https://raw.githubusercontent.com/rojo-rbx/rokit/main/scripts/install.sh | bash
+
+      - name: Install Tools
+        run: |
+          export PATH="$HOME/.rokit/bin:$PATH"
+          rokit trust rojo-rbx/rojo
+          rokit trust UpliftGames/wally
+          rokit install
+
+      - name: Rokit Cache Save
+        if: always()
+        uses: actions/cache/save@v5
+        with:
+          path: ~/.rokit
+          key: rokit-${{ hashFiles('rokit.toml') }}
+
+      - name: Publish to Wally
+        run: |
+          export PATH="$HOME/.rokit/bin:$PATH"
+          mkdir -p ~/.wally
+          cat > ~/.wally/auth.toml << 'EOF'
+          [tokens]
+          "https://api.wally.run/" = "${{ secrets.WALLY_TOKEN }}"
+          EOF
+          wally publish
+
+      - name: Publish Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release edit "${{ github.ref_name }}" --draft=false
