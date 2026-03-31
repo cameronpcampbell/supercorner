@@ -53,9 +53,9 @@ type CacheEntry = {
 const Cache: { [string]: CacheEntry } = {}
 const CacheKeyBuf = buffer.create(66)
 
-const function GetCacheKey(params: CreateParams): string
-	buffer.writef64(CacheKeyBuf, 0, params.Width * 2)
-	buffer.writef64(CacheKeyBuf, 8, params.Height * 2)
+const function GetCacheKey(width: number, height: number, params: RedrawParams): string
+	buffer.writef64(CacheKeyBuf, 0, width)
+	buffer.writef64(CacheKeyBuf, 8, height)
 	buffer.writef64(CacheKeyBuf, 16, params.CornerRadius)
 	buffer.writef64(CacheKeyBuf, 24, params.CornerSmoothing)
 	buffer.writef64(CacheKeyBuf, 32, if params.TopLeftCornerRadius ~= nil then params.TopLeftCornerRadius else -1)
@@ -142,12 +142,11 @@ local function CalcSizeFromCorners(params: RedrawParams): Vector2
 end
 
 const function new(params: CreateParams): Squircle
-	local cacheKey = GetCacheKey(params)
+	local width, height = params.Width * 2, params.Height * 2
+	local cacheKey = GetCacheKey(width, height, params)
 	local entry: CacheEntry? = Cache[cacheKey]
 
 	if entry == nil then
-		local width, height = params.Width * 2, params.Height * 2
-
 		local state: SquircleState = {
 			EImage = AssetService:CreateEditableImage({ Size = Vector2.new(width, height) }),
 			PixelBuf = buffer.create(width * height * 4),
@@ -175,27 +174,53 @@ const function new(params: CreateParams): Squircle
 		Redraw = function(self: Squircle, new_params: RedrawParams)
 			if destroyed then return end
 
-			if entry ~= nil then
-				entry.refCount -= 1
+			local newKey = GetCacheKey(width, height, new_params)
 
-				if entry.refCount == 0 then
-					Cache[entry.key] = nil
+			-- Already on this exact cache entry
+			if entry ~= nil and entry.key == newKey then return end
 
-				else
-					local width, height = state.Width, state.Height
+			-- Check if new params match an existing cache entry
+			local newEntry = Cache[newKey]
 
-					state = {
-						EImage = AssetService:CreateEditableImage({ Size = Vector2.new(width, height) }),
-						PixelBuf = buffer.create(width * height * 4),
-						Width = width,
-						Height = height,
-					}
+			if newEntry ~= nil then
+				-- New params already cached — reuse it
+				local oldEImage = state.EImage
+				local ownsOldState = entry == nil or entry.refCount == 1
+
+				if entry ~= nil then
+					entry.refCount -= 1
+					if entry.refCount == 0 then
+						Cache[entry.key] = nil
+					end
 				end
 
-				entry = nil
-			end
+				entry = newEntry
+				entry.refCount += 1
+				state = entry.state
 
-			render(state, new_params)
+				if ownsOldState and oldEImage ~= state.EImage then
+					oldEImage:Destroy()
+				end
+			else
+				-- New params not cached — render and cache
+				if entry ~= nil then
+					entry.refCount -= 1
+					if entry.refCount == 0 then
+						Cache[entry.key] = nil
+					else
+						state = {
+							EImage = AssetService:CreateEditableImage({ Size = Vector2.new(width, height) }),
+							PixelBuf = buffer.create(width * height * 4),
+							Width = width,
+							Height = height,
+						}
+					end
+				end
+
+				render(state, new_params)
+				entry = { state = state, refCount = 1, key = newKey }
+				Cache[newKey] = entry
+			end
 		end,
 
 		GetContent = function(self: Squircle): Content
