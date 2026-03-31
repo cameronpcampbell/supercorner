@@ -1,4 +1,5 @@
 --!strict
+--!nolint LocalShadow
 
 -- Edge buffer layout (f32 fields at byte offsets)
 -- [0] yMin  [4] yMax  [8] xAtYmin  [12] dxPerDy  [16] dir (+1/-1)
@@ -6,7 +7,9 @@ const EDGE_STRIDE = 20
 
 const VERTEX_STRIDE = 8
 
--- Fill a pixel span using repeated buffer.copy doubling (1→2→4→8→...)
+-- Fills a span of pixels with a u32 color by writing one pixel then exponentially
+-- doubling via buffer.copy. This is needed as buffer.fill sets every byte to the same
+-- 8-bit value, so it can't write a repeating 4-byte RGBA pattern.
 const function fillInterior(
     pixelBuf: buffer,
     spanStart: number,
