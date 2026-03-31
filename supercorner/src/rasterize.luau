@@ -7,7 +7,7 @@ const EDGE_STRIDE = 20
 const VERTEX_STRIDE = 8
 
 -- Fill a pixel span using repeated buffer.copy doubling (1→2→4→8→...)
-local function fill_interior(
+const function fill_interior(
     pixel_buf: buffer,
     span_start: number,
     span: number,
@@ -24,7 +24,7 @@ local function fill_interior(
 end
 
 -- Clip an edge intersection pair to pixel bounds and fill the span
-local function fill_span_solid(
+const function fill_span_solid(
     pixel_buf: buffer,
     row_offset: number,
     x_left: number,
@@ -46,7 +46,7 @@ end
 -- Signed area coverage for one edge within a single scanline band [y_top, y_top+1].
 -- area_buf accumulates the pixel-local signed area (used for edge pixels).
 -- fill_buf accumulates the winding delta (propagated across the scanline via prefix sum).
-local function process_edge_aa(
+const function process_edge_aa(
     area_buf: buffer,
     fill_buf: buffer,
     y_min: number,
@@ -108,7 +108,7 @@ end
 
 -- Find sorted edge-scanline intersections for the non-AA path.
 -- Returns updated first_edge_offset (for active edge tracking) and intersection count.
-local function find_intersections(
+const function find_intersections(
     edge_buf: buffer,
     edge_end: number,
     first_edge_offset: number,
@@ -154,7 +154,7 @@ local function find_intersections(
     return first_edge_offset, x_count
 end
 
-local function rasterize(
+const function rasterize(
     pixel_buf: buffer,
     vertices: buffer,
     vertex_count: number,

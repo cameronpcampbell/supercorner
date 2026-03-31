@@ -17,7 +17,7 @@
 
 /*.rbxm
 
-/sourcemap.json
+sourcemap.json
 
 # IDEs
 .idea/       # JetBrains (CLion, IntelliJ, etc.)
