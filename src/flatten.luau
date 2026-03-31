@@ -283,6 +283,4 @@ const function flatten(ops: { SvgOp }, tolerance: number): (buffer, number)
 	return buf, count
 end
 
-return {
-	flatten = flatten,
-}
+return flatten

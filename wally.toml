@@ -1,0 +1,10 @@
+[package]
+name = "cameronpcampbell/supercorner"
+description = "A figma-inspired alternative to Roblox's UICorner."
+version = "0.0.1"
+registry = "https://github.com/UpliftGames/wally-index"
+realm = "shared"
+license = "MIT"
+authors=[ "Cameron P Campbell" ]
+exclude=[ "**", "**/*.test.luau", "**/*.bench.luau" ]
+include=[ "src", "src/**", "default.project.json", "wally.toml", "wally.lock", "LICENSE.md", "README.md" ]

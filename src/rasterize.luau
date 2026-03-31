@@ -154,7 +154,7 @@ local function find_intersections(
     return first_edge_offset, x_count
 end
 
-local function rasterize_into(
+local function rasterize(
     pixel_buf: buffer,
     vertices: buffer,
     vertex_count: number,
@@ -360,6 +360,4 @@ local function rasterize_into(
     end
 end
 
-return {
-    rasterize_into = rasterize_into,
-}
+return rasterize

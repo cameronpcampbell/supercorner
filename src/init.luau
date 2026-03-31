@@ -1,8 +1,8 @@
 --!strict
 
 const figma_squircle = require("@self/figma_squircle_luau")
-const flatten_mod = require("@self/flatten")
-const rasterize_mod = require("@self/rasterize")
+const flatten = require("@self/flatten")
+const rasterize = require("@self/rasterize")
 
 local AssetService = game:GetService("AssetService")
 
@@ -69,11 +69,11 @@ const function render(state: SquircleState, params: RedrawParams)
 
 	const anti_alias = if params.antiAlias ~= nil then params.antiAlias else true
 	const tolerance = if anti_alias then 1/4 else 1/2
-	const vertices, vertex_count = flatten_mod.flatten(ops, tolerance)
+	const vertices, vertex_count = flatten(ops, tolerance)
 
 	buffer.fill(state._pixel_buf, 0, 0)
 
-	rasterize_mod.rasterize_into(
+	rasterize(
 		state._pixel_buf,
 		vertices,
 		vertex_count,
