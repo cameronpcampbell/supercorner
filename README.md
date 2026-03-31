@@ -29,7 +29,7 @@ ImageLabel.ImageContent = Squircle:GetContent()
 ImageLabel.ScaleType = Enum.ScaleType.Slice
 ImageLabel.Size = UDim2.fromOffset(200, 200)
 ImageLabel.BackgroundTransparency = 1
-ImageLabel.Parent = some_parent
+ImageLabel.Parent = SomeParent
 
 -- Update corners later
 Squircle:Redraw({
