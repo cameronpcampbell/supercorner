@@ -57,6 +57,18 @@ type StaticCacheEntry = {
 	key: string,
 }
 
+type CreateDataModelContentAsync =
+    (self: AssetService, content: Content, options: { [string]: any }?)
+        -> (Enum.CreateContentResult, Content)
+
+const CAN_CREATE_STATIC_CONTENT = (function()
+    const ok, data = pcall(
+        AssetService.CreateDataModelContentAsync, AssetService, Content.none, nil
+    )
+
+    return if ok then ok else data ~= "CreateDataModelContentAsync is not available yet"
+end)()
+
 const Cache: { [string]: CacheEntry } = {}
 const StaticCache: { [string]: StaticCacheEntry } = {}
 const CacheKeyBuf = buffer.create(66)
@@ -128,18 +140,6 @@ const function render(state: SquircleState, params: RedrawParams)
 		state.PixelBuf
 	)
 end
-
-const CAN_CREATE_STATIC_CONTENT = (function()
-    const ok, data = pcall(
-        AssetService.CreateDataModelContentAsync, AssetService, Content.none, nil
-    )
-
-    return if ok then ok else data ~= "CreateDataModelContentAsync is not available yet"
-end)()
-
-type CreateDataModelContentAsync =
-    (self: AssetService, content: Content, options: { [string]: any }?)
-        -> (Enum.CreateContentResult, Content)
 
 const function ToStaticContent(eImage: EditableImage): Content
 	local result, content = (AssetService.CreateDataModelContentAsync :: CreateDataModelContentAsync)(AssetService, Content.fromObject(eImage))
