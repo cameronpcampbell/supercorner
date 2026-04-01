@@ -27,8 +27,9 @@ jobs:
       - name: Check CHANGELOG.md has entry for this version
         run: |
           TAG="${{ github.ref_name }}"
-          if ! grep -q "^# $TAG" CHANGELOG.md; then
-            echo "::error::No changelog entry found for $TAG in CHANGELOG.md. Add a '# $TAG' section before releasing."
+          VERSION="${TAG#supercorner-}"
+          if ! grep -q "^# $VERSION" CHANGELOG.md; then
+            echo "::error::No changelog entry found for $VERSION in CHANGELOG.md. Add a '# $VERSION' section before releasing."
             exit 1
           fi
 
@@ -46,9 +47,10 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="${{ github.ref_name }}"
+          VERSION="${TAG#supercorner-}"
 
           # Extract changelog section for this version
-          CHANGELOG=$(awk -v tag="$TAG" '
+          CHANGELOG=$(awk -v tag="$VERSION" '
             BEGIN { found=0 }
             /^# / {
               if (found) exit
@@ -58,7 +60,7 @@ jobs:
           ' supercorner/CHANGELOG.md | sed '/./,$!d' | sed -e :a -e '/^\n*$/{$d;N;ba}')
 
           if [ -z "$CHANGELOG" ]; then
-            echo "::error::No changelog entry found for $TAG in CHANGELOG.md"
+            echo "::error::No changelog entry found for $VERSION in CHANGELOG.md"
             exit 1
           fi
 
