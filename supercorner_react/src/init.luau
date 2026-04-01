@@ -146,6 +146,14 @@ return function(props: T.Flatten<Supercorner.CreateParams & {
         return supercorner
     end) :: any
 
+    React.useEffect(function()
+        return function()
+            if supercorner then
+                supercorner:Destroy()
+            end
+        end
+    end, {})
+
     return
         if supercorner then RenderSupercorner(props, supercorner)
         else RenderFallback(props)
