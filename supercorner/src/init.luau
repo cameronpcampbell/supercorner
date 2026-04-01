@@ -8,14 +8,16 @@ const Rasterize = require("@self/rasterize")
 const AssetService = game:GetService("AssetService")
 
 export type CreateParams = {
-	Width: number,
-	Height: number,
 	CornerRadius: number,
 	CornerSmoothing: number,
 	TopLeftCornerRadius: number?,
 	TopRightCornerRadius: number?,
 	BottomRightCornerRadius: number?,
 	BottomLeftCornerRadius: number?,
+	MaxTopLeftCornerRadius: number?,
+	MaxTopRightCornerRadius: number?,
+	MaxBottomRightCornerRadius: number?,
+	MaxBottomLeftCornerRadius: number?,
 	PreserveSmoothing: boolean?,
 	AntiAlias: boolean?,
 	Redrawable: boolean?,
@@ -168,7 +170,68 @@ local function CalcSizeFromCorners(params: RedrawParams): Vector2
 	)
 end
 
-const function NewRedrawable(width: number, height: number, cacheKey: string, params: RedrawParams): Squircle
+const function ClampToMaxRadii(
+	params: RedrawParams,
+	maxTopLeft: number,
+	maxTopRight: number,
+	maxBottomRight: number,
+	maxBottomLeft: number
+): RedrawParams
+	local defaultRadius = params.CornerRadius
+	local topLeft = params.TopLeftCornerRadius or defaultRadius
+	local topRight = params.TopRightCornerRadius or defaultRadius
+	local bottomRight = params.BottomRightCornerRadius or defaultRadius
+	local bottomLeft = params.BottomLeftCornerRadius or defaultRadius
+
+	local clamped = false
+
+	if topLeft > maxTopLeft then
+		clamped = true
+		warn(`[Supercorner] TopLeft corner radius {topLeft} exceeds max {maxTopLeft}. Clamping!`)
+		topLeft = maxTopLeft
+	end
+	if topRight > maxTopRight then
+		clamped = true
+		warn(`[Supercorner] TopRight corner radius {topRight} exceeds max {maxTopRight}. Clamping!`)
+		topRight = maxTopRight
+	end
+	if bottomRight > maxBottomRight then
+		clamped = true
+		warn(`[Supercorner] BottomRight corner radius {bottomRight} exceeds max {maxBottomRight}. Clamping!`)
+		bottomRight = maxBottomRight
+	end
+	if bottomLeft > maxBottomLeft then
+		clamped = true
+		warn(`[Supercorner] BottomLeft corner radius {bottomLeft} exceeds max {maxBottomLeft}. Clamping!`)
+		bottomLeft = maxBottomLeft
+	end
+
+	if not clamped then
+		return params
+	end
+
+	return {
+		CornerRadius = math.min(defaultRadius, maxTopLeft, maxTopRight, maxBottomRight, maxBottomLeft),
+		CornerSmoothing = params.CornerSmoothing,
+		TopLeftCornerRadius = topLeft,
+		TopRightCornerRadius = topRight,
+		BottomRightCornerRadius = bottomRight,
+		BottomLeftCornerRadius = bottomLeft,
+		PreserveSmoothing = params.PreserveSmoothing,
+		AntiAlias = params.AntiAlias,
+	}
+end
+
+const function NewRedrawable(
+	width: number,
+	height: number,
+	cacheKey: string,
+	params: RedrawParams,
+	maxTopLeft: number,
+	maxTopRight: number,
+	maxBottomRight: number,
+	maxBottomLeft: number
+): Squircle
 	local entry: CacheEntry? = Cache[cacheKey]
 
 	if entry == nil then
@@ -199,6 +262,7 @@ const function NewRedrawable(width: number, height: number, cacheKey: string, pa
 		Redraw = function(self: Squircle, new_params: RedrawParams)
 			if destroyed then return end
 
+			new_params = ClampToMaxRadii(new_params, maxTopLeft, maxTopRight, maxBottomRight, maxBottomLeft)
 			local newKey = GetCacheKey(width, height, new_params)
 
 			if entry ~= nil and entry.key == newKey then return end
@@ -337,14 +401,28 @@ const function NewStatic(width: number, height: number, cacheKey: string, params
 end
 
 const function new(params: CreateParams): Squircle
-	local width, height = params.Width * 2, params.Height * 2
-	local cacheKey = GetCacheKey(width, height, params)
+	local defaultRadius = params.CornerRadius
+	local maxTopLeft = params.MaxTopLeftCornerRadius or params.TopLeftCornerRadius or defaultRadius
+	local maxTopRight = params.MaxTopRightCornerRadius or params.TopRightCornerRadius or defaultRadius
+	local maxBottomRight = params.MaxBottomRightCornerRadius or params.BottomRightCornerRadius or defaultRadius
+	local maxBottomLeft = params.MaxBottomLeftCornerRadius or params.BottomLeftCornerRadius or defaultRadius
+
+	local topLeftExtension = maxTopLeft * 2
+	local topRightExtension = maxTopRight * 2
+	local bottomRightExtension = maxBottomRight * 2
+	local bottomLeftExtension = maxBottomLeft * 2
+
+	local width = math.max(1, math.ceil(math.max(topLeftExtension + topRightExtension, bottomLeftExtension + bottomRightExtension))) * 2
+	local height = math.max(1, math.ceil(math.max(topLeftExtension + bottomLeftExtension, topRightExtension + bottomRightExtension))) * 2
+
+	local clampedParams = ClampToMaxRadii(params, maxTopLeft, maxTopRight, maxBottomRight, maxBottomLeft)
+	local cacheKey = GetCacheKey(width, height, clampedParams)
 
 	if params.Redrawable or not CAN_CREATE_STATIC_CONTENT then
-		return NewRedrawable(width, height, cacheKey, params)
+		return NewRedrawable(width, height, cacheKey, clampedParams, maxTopLeft, maxTopRight, maxBottomRight, maxBottomLeft)
 	end
 
-	return NewStatic(width, height, cacheKey, params)
+	return NewStatic(width, height, cacheKey, clampedParams)
 end
 
 local function GetCacheSize(): number
