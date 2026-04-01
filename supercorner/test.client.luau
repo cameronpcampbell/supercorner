@@ -49,24 +49,24 @@ const function CreateColumn(
 	return column
 end
 
--- Squircle column (left)
-const SquircleColumn = CreateColumn(1, UDim.new(0.5, -GAP / 2))
+-- Supercorner column (left)
+const SupercornerColumn = CreateColumn(1, UDim.new(0.5, -GAP / 2))
 
-const SquircleTitle = Instance.new("TextLabel")
-SquircleTitle.Size = UDim2.new(1, 0, 0, 28)
-SquircleTitle.BackgroundTransparency = 1
-SquircleTitle.TextColor3 = Color3.fromRGB(66, 61, 38)
-SquircleTitle.TextSize = 20
-SquircleTitle.Font = Enum.Font.GothamBlack
-SquircleTitle.Text = "SuperCorner"
-SquircleTitle.LayoutOrder = 0
-SquircleTitle.Parent = SquircleColumn
+const SupercornerTitle = Instance.new("TextLabel")
+SupercornerTitle.Size = UDim2.new(1, 0, 0, 28)
+SupercornerTitle.BackgroundTransparency = 1
+SupercornerTitle.TextColor3 = Color3.fromRGB(66, 61, 38)
+SupercornerTitle.TextSize = 20
+SupercornerTitle.Font = Enum.Font.GothamBlack
+SupercornerTitle.Text = "SuperCorner"
+SupercornerTitle.LayoutOrder = 0
+SupercornerTitle.Parent = SupercornerColumn
 
 local ImageLabel = Instance.new("ImageLabel")
 ImageLabel.Size = UDim2.fromOffset(SIZE, SIZE)
 ImageLabel.BackgroundTransparency = 1
 ImageLabel.LayoutOrder = 1
-ImageLabel.Parent = SquircleColumn
+ImageLabel.Parent = SupercornerColumn
 
 -- Native column (right)
 const NativeColumn = CreateColumn(0, UDim.new(0.5, GAP / 2))
@@ -93,20 +93,20 @@ NativeCorner.CornerRadius = UDim.new(0, 45)
 NativeCorner.Parent = NativeFrame
 
 -- State
-local CornerRadius = 45
+local Radius = 45
 local CornerSmoothing = 1
-local TopLeftCornerRadius: number? = nil
-local TopRightCornerRadius: number? = nil
-local BottomRightCornerRadius: number? = nil
-local BottomLeftCornerRadius: number? = nil
+local TopLeftRadius: number? = nil
+local TopRightRadius: number? = nil
+local BottomRightRadius: number? = nil
+local BottomLeftRadius: number? = nil
 
 const squircle = Supercorner.new({
-	CornerRadius = CornerRadius,
+	Radius = Radius,
 	CornerSmoothing = CornerSmoothing,
-	MaxTopLeftCornerRadius = SIZE,
-	MaxTopRightCornerRadius = SIZE,
-	MaxBottomRightCornerRadius = SIZE,
-	MaxBottomLeftCornerRadius = SIZE,
+	MaxTopLeftRadius = SIZE,
+	MaxTopRightRadius = SIZE,
+	MaxBottomRightRadius = SIZE,
+	MaxBottomLeftRadius = SIZE,
 	Redrawable = true,
 })
 
@@ -118,12 +118,12 @@ ImageLabel.ScaleType = Enum.ScaleType.Slice
 
 local function Redraw()
 	squircle:Redraw({
-		CornerRadius = CornerRadius,
+		Radius = Radius,
 		CornerSmoothing = CornerSmoothing,
-		TopLeftCornerRadius = TopLeftCornerRadius,
-		TopRightCornerRadius = TopRightCornerRadius,
-		BottomRightCornerRadius = BottomRightCornerRadius,
-		BottomLeftCornerRadius = BottomLeftCornerRadius
+		TopLeftRadius = TopLeftRadius,
+		TopRightRadius = TopRightRadius,
+		BottomRightRadius = BottomRightRadius,
+		BottomLeftRadius = BottomLeftRadius
 	})
 
 	ImageLabel.ImageContent = squircle:GetContent()
@@ -253,13 +253,13 @@ const CornerSetters: { SliderSetValue } = {}
 local Syncing = false
 
 local function corner_changed(value: number, index: number)
-	if index == 1 then TopLeftCornerRadius = value
+	if index == 1 then TopLeftRadius = value
 
-	elseif index == 2 then TopRightCornerRadius = value
+	elseif index == 2 then TopRightRadius = value
 
-	elseif index == 3 then BottomRightCornerRadius = value
+	elseif index == 3 then BottomRightRadius = value
 
-	elseif index == 4 then BottomLeftCornerRadius = value
+	elseif index == 4 then BottomLeftRadius = value
 
 	elseif index == 5 then NativeCorner.CornerRadius = UDim.new(0, value)
 	end
@@ -281,35 +281,35 @@ local function corner_changed(value: number, index: number)
 	end
 end
 
--- Squircle sliders
-local SquircleSliderOrder = 2
+-- Supercorner sliders
+local SupercornerSliderOrder = 2
 
-table.insert(CornerSetters, CreateSlider("Top Left Corner Radius", 0, SIZE, CornerRadius, 1, SquircleSliderOrder, SquircleColumn, function(value)
+table.insert(CornerSetters, CreateSlider("Top Left Radius", 0, SIZE, Radius, 1, SupercornerSliderOrder, SupercornerColumn, function(value)
 	corner_changed(value, 1)
 end))
-SquircleSliderOrder += 1
+SupercornerSliderOrder += 1
 
-table.insert(CornerSetters, CreateSlider("Top Right Corner Radius", 0, SIZE, CornerRadius, 1, SquircleSliderOrder, SquircleColumn, function(value)
+table.insert(CornerSetters, CreateSlider("Top Right Radius", 0, SIZE, Radius, 1, SupercornerSliderOrder, SupercornerColumn, function(value)
 	corner_changed(value, 2)
 end))
-SquircleSliderOrder += 1
+SupercornerSliderOrder += 1
 
-table.insert(CornerSetters, CreateSlider("Bottom Right Corner Radius", 0, SIZE, CornerRadius, 1, SquircleSliderOrder, SquircleColumn, function(value)
+table.insert(CornerSetters, CreateSlider("Bottom Right Radius", 0, SIZE, Radius, 1, SupercornerSliderOrder, SupercornerColumn, function(value)
 	corner_changed(value, 3)
 end))
-SquircleSliderOrder += 1
+SupercornerSliderOrder += 1
 
-table.insert(CornerSetters, CreateSlider("Bottom Left Corner Radius", 0, SIZE, CornerRadius, 1, SquircleSliderOrder, SquircleColumn, function(value)
+table.insert(CornerSetters, CreateSlider("Bottom Left Radius", 0, SIZE, Radius, 1, SupercornerSliderOrder, SupercornerColumn, function(value)
 	corner_changed(value, 4)
 end))
-SquircleSliderOrder += 1
+SupercornerSliderOrder += 1
 
-CreateSlider("Corner Smoothing", 0, 1, CornerSmoothing, 0.01, SquircleSliderOrder, SquircleColumn, function(value)
+CreateSlider("Corner Smoothing", 0, 1, CornerSmoothing, 0.01, SupercornerSliderOrder, SupercornerColumn, function(value)
 	CornerSmoothing = value
 	Redraw()
 end)
 
 -- Native slider
-table.insert(CornerSetters, CreateSlider("Corner Radius", 0, SIZE, CornerRadius, 1, 2, NativeColumn, function(value)
+table.insert(CornerSetters, CreateSlider("Corner Radius", 0, SIZE, Radius, 1, 2, NativeColumn, function(value)
 	corner_changed(value, 5)
 end))

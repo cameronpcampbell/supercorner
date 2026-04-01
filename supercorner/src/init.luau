@@ -8,42 +8,42 @@ const Rasterize = require("@self/rasterize")
 const AssetService = game:GetService("AssetService")
 
 export type CreateParams = {
-	CornerRadius: number,
+	Radius: number,
 	CornerSmoothing: number,
-	TopLeftCornerRadius: number?,
-	TopRightCornerRadius: number?,
-	BottomRightCornerRadius: number?,
-	BottomLeftCornerRadius: number?,
-	MaxCornerRadius: number?,
-	MaxTopLeftCornerRadius: number?,
-	MaxTopRightCornerRadius: number?,
-	MaxBottomRightCornerRadius: number?,
-	MaxBottomLeftCornerRadius: number?,
+	TopLeftRadius: number?,
+	TopRightRadius: number?,
+	BottomRightRadius: number?,
+	BottomLeftRadius: number?,
+	MaxRadius: number?,
+	MaxTopLeftRadius: number?,
+	MaxTopRightRadius: number?,
+	MaxBottomRightRadius: number?,
+	MaxBottomLeftRadius: number?,
 	PreserveSmoothing: boolean?,
 	AntiAlias: boolean?,
 	Redrawable: boolean?,
 }
 
 export type RedrawParams = {
-	CornerRadius: number,
+	Radius: number,
 	CornerSmoothing: number,
-	TopLeftCornerRadius: number?,
-	TopRightCornerRadius: number?,
-	BottomRightCornerRadius: number?,
-	BottomLeftCornerRadius: number?,
+	TopLeftRadius: number?,
+	TopRightRadius: number?,
+	BottomRightRadius: number?,
+	BottomLeftRadius: number?,
 	PreserveSmoothing: boolean?,
 	AntiAlias: boolean?
 }
 
-export type Squircle = {
-	Redraw: (self: Squircle, params: RedrawParams) -> (),
-	GetContent: (self: Squircle) -> Content,
-	GetSliceCenter: (self: Squircle) -> Rect,
-	GetSliceScale: (self: Squircle) -> number,
-	Destroy: (self: Squircle) -> (),
+export type Supercorner = {
+	Redraw: (self: Supercorner, params: RedrawParams) -> (),
+	GetContent: (self: Supercorner) -> Content,
+	GetSliceCenter: (self: Supercorner) -> Rect,
+	GetSliceScale: (self: Supercorner) -> number,
+	Destroy: (self: Supercorner) -> (),
 }
 
-type SquircleState = {
+type SupercornerState = {
 	EImage: EditableImage,
 	PixelBuf: buffer,
 	Width: number,
@@ -51,7 +51,7 @@ type SquircleState = {
 }
 
 type CacheEntry = {
-	state: SquircleState,
+	state: SupercornerState,
 	refCount: number,
 	key: string,
 }
@@ -81,12 +81,12 @@ const CacheKeyBuf = buffer.create(66)
 const function GetCacheKey(width: number, height: number, params: RedrawParams): string
 	buffer.writef64(CacheKeyBuf, 0, width)
 	buffer.writef64(CacheKeyBuf, 8, height)
-	buffer.writef64(CacheKeyBuf, 16, params.CornerRadius)
+	buffer.writef64(CacheKeyBuf, 16, params.Radius)
 	buffer.writef64(CacheKeyBuf, 24, params.CornerSmoothing)
-	buffer.writef64(CacheKeyBuf, 32, if params.TopLeftCornerRadius ~= nil then params.TopLeftCornerRadius else -1)
-	buffer.writef64(CacheKeyBuf, 40, if params.TopRightCornerRadius ~= nil then params.TopRightCornerRadius else -1)
-	buffer.writef64(CacheKeyBuf, 48, if params.BottomRightCornerRadius ~= nil then params.BottomRightCornerRadius else -1)
-	buffer.writef64(CacheKeyBuf, 56, if params.BottomLeftCornerRadius ~= nil then params.BottomLeftCornerRadius else -1)
+	buffer.writef64(CacheKeyBuf, 32, if params.TopLeftRadius ~= nil then params.TopLeftRadius else -1)
+	buffer.writef64(CacheKeyBuf, 40, if params.TopRightRadius ~= nil then params.TopRightRadius else -1)
+	buffer.writef64(CacheKeyBuf, 48, if params.BottomRightRadius ~= nil then params.BottomRightRadius else -1)
+	buffer.writef64(CacheKeyBuf, 56, if params.BottomLeftRadius ~= nil then params.BottomLeftRadius else -1)
 	buffer.writeu8(CacheKeyBuf, 64, if params.PreserveSmoothing then 1 else 0)
 	buffer.writeu8(CacheKeyBuf, 65, if params.AntiAlias == false then 0 else 1)
 	return buffer.tostring(CacheKeyBuf)
@@ -94,30 +94,30 @@ end
 
 -- All geometry is rendered at 2x scale for HiDPI. Params use logical pixels;
 -- the render function doubles radii to match the internal coordinate space.
-const function Render(state: SquircleState, params: RedrawParams)
+const function Render(state: SupercornerState, params: RedrawParams)
 	const width, height = state.Width, state.Height
 
 	-- Smoothing of exactly 1 produces degenerate corners; clamp just below.
 	local clampedSmoothing = math.min(params.CornerSmoothing, 1 - 1e-6)
 
-	local topLeftCornerRadius, topRightCornerRadius =
-	    params.TopLeftCornerRadius, params.TopRightCornerRadius
-	local bottomRightCornerRadius, bottomLeftCornerRadius =
-		params.BottomRightCornerRadius, params.BottomLeftCornerRadius
+	local topLeftRadius, topRightRadius =
+	    params.TopLeftRadius, params.TopRightRadius
+	local bottomRightRadius, bottomLeftRadius =
+		params.BottomRightRadius, params.BottomLeftRadius
 
 	const ops = FigmaSquircle.get_svg_path({
 		width = width,
 		height = height,
-		cornerRadius = params.CornerRadius * 2,
+		cornerRadius = params.Radius * 2,
 		cornerSmoothing = clampedSmoothing,
-		topLeftCornerRadius =
-		    if topLeftCornerRadius then topLeftCornerRadius * 2 else nil,
-		topRightCornerRadius =
-		    if topRightCornerRadius then topRightCornerRadius * 2 else nil,
-		bottomRightCornerRadius =
-		    if bottomRightCornerRadius then bottomRightCornerRadius * 2 else nil,
-		bottomLeftCornerRadius =
-		    if bottomLeftCornerRadius then bottomLeftCornerRadius * 2 else nil,
+		topLeftRadius =
+		    if topLeftRadius then topLeftRadius * 2 else nil,
+		topRightRadius =
+		    if topRightRadius then topRightRadius * 2 else nil,
+		bottomRightRadius =
+		    if bottomRightRadius then bottomRightRadius * 2 else nil,
+		bottomLeftRadius =
+		    if bottomLeftRadius then bottomLeftRadius * 2 else nil,
 		preserveSmoothing = params.PreserveSmoothing,
 	})
 
@@ -157,11 +157,11 @@ const function ClampToMaxRadii(
 	maxBottomRight: number,
 	maxBottomLeft: number
 ): RedrawParams
-	local defaultRadius = params.CornerRadius
-	local topLeft = params.TopLeftCornerRadius or defaultRadius
-	local topRight = params.TopRightCornerRadius or defaultRadius
-	local bottomRight = params.BottomRightCornerRadius or defaultRadius
-	local bottomLeft = params.BottomLeftCornerRadius or defaultRadius
+	local defaultRadius = params.Radius
+	local topLeft = params.TopLeftRadius or defaultRadius
+	local topRight = params.TopRightRadius or defaultRadius
+	local bottomRight = params.BottomRightRadius or defaultRadius
+	local bottomLeft = params.BottomLeftRadius or defaultRadius
 
 	local clamped = false
 
@@ -194,12 +194,12 @@ const function ClampToMaxRadii(
 	end
 
 	return {
-		CornerRadius = math.min(defaultRadius, maxTopLeft, maxTopRight, maxBottomRight, maxBottomLeft),
+		Radius = math.min(defaultRadius, maxTopLeft, maxTopRight, maxBottomRight, maxBottomLeft),
 		CornerSmoothing = params.CornerSmoothing,
-		TopLeftCornerRadius = topLeft,
-		TopRightCornerRadius = topRight,
-		BottomRightCornerRadius = bottomRight,
-		BottomLeftCornerRadius = bottomLeft,
+		TopLeftRadius = topLeft,
+		TopRightRadius = topRight,
+		BottomRightRadius = bottomRight,
+		BottomLeftRadius = bottomLeft,
 		PreserveSmoothing = params.PreserveSmoothing,
 		AntiAlias = params.AntiAlias,
 	}
@@ -211,13 +211,13 @@ end
 -- so that no corner is cut by the 9-slice.
 const function CalcSliceCenter(width: number, height: number, params: RedrawParams): Rect
 	local smoothing = math.min(params.CornerSmoothing, 1 - 1e-6)
-	local defaultRadius = params.CornerRadius
+	local defaultRadius = params.Radius
 	local factor = (1 + smoothing) * 2
 
-	local topLeftExtension = (params.TopLeftCornerRadius or defaultRadius) * factor
-	local topRightExtension = (params.TopRightCornerRadius or defaultRadius) * factor
-	local bottomRightExtension = (params.BottomRightCornerRadius or defaultRadius) * factor
-	local bottomLeftExtension = (params.BottomLeftCornerRadius or defaultRadius) * factor
+	local topLeftExtension = (params.TopLeftRadius or defaultRadius) * factor
+	local topRightExtension = (params.TopRightRadius or defaultRadius) * factor
+	local bottomRightExtension = (params.BottomRightRadius or defaultRadius) * factor
+	local bottomLeftExtension = (params.BottomLeftRadius or defaultRadius) * factor
 
 	return Rect.new(
 		math.max(topLeftExtension, bottomLeftExtension),
@@ -250,12 +250,12 @@ const function NewRedrawable(
 	maxTopRight: number,
 	maxBottomRight: number,
 	maxBottomLeft: number
-): Squircle
+): Supercorner
 	local cacheKey = GetCacheKey(width, height, params)
 	local entry: CacheEntry? = Cache[cacheKey]
 
 	if entry == nil then
-		local state: SquircleState = {
+		local state: SupercornerState = {
 			EImage = AssetService:CreateEditableImage({ Size = Vector2.new(width, height) }),
 			PixelBuf = buffer.create(width * height * 4),
 			Width = width,
@@ -273,14 +273,14 @@ const function NewRedrawable(
 		Cache[cacheKey] = entry
 	end
 
-	local state: SquircleState = (entry :: CacheEntry).state
+	local state: SupercornerState = (entry :: CacheEntry).state
 	local destroyed = false
 	local sliceCenter = CalcSliceCenter(width, height, params);
 
 	(entry :: CacheEntry).refCount += 1
 
 	return {
-		Redraw = function(self: Squircle, newParams: RedrawParams)
+		Redraw = function(self: Supercorner, newParams: RedrawParams)
 			if destroyed then return end
 
 			newParams = ClampToMaxRadii(newParams, maxTopLeft, maxTopRight, maxBottomRight, maxBottomLeft)
@@ -337,19 +337,19 @@ const function NewRedrawable(
 			Cache[newKey] = entry
 		end,
 
-		GetContent = function(self: Squircle): Content
+		GetContent = function(self: Supercorner): Content
 			return Content.fromObject(state.EImage)
 		end,
 
-		GetSliceCenter = function(self: Squircle): Rect
+		GetSliceCenter = function(self: Supercorner): Rect
 			return sliceCenter
 		end,
 
-		GetSliceScale = function(self: Squircle): number
+		GetSliceScale = function(self: Supercorner): number
 			return 0.5
 		end,
 
-		Destroy = function(self: Squircle)
+		Destroy = function(self: Supercorner)
 			if destroyed then return end
 			destroyed = true
 
@@ -370,7 +370,7 @@ const function NewRedrawable(
 	}
 end
 
-const function NewStatic(width: number, height: number, params: RedrawParams): Squircle
+const function NewStatic(width: number, height: number, params: RedrawParams): Supercorner
 	local cacheKey = GetCacheKey(width, height, params)
 	local staticEntry: StaticCacheEntry? = StaticCache[cacheKey]
 	local destroyed = false
@@ -383,7 +383,7 @@ const function NewStatic(width: number, height: number, params: RedrawParams): S
 	else
 		local eImage = AssetService:CreateEditableImage({ Size = Vector2.new(width, height) })
 
-		local tempState: SquircleState = {
+		local tempState: SupercornerState = {
 			EImage = eImage,
 			PixelBuf = buffer.create(width * height * 4),
 			Width = width,
@@ -406,7 +406,7 @@ const function NewStatic(width: number, height: number, params: RedrawParams): S
 	local sliceCenter = CalcSliceCenter(width, height, params)
 
 	return {
-		Redraw = function(self: Squircle, newParams: RedrawParams)
+		Redraw = function(self: Supercorner, newParams: RedrawParams)
 			error(
 				"Cannot redraw a non-redrawable Supercorner. Pass `Redrawable = true` in the"
 				.. " constructor params to enable redrawing. You can also call `:SetRedrawable(true)`"
@@ -414,19 +414,19 @@ const function NewStatic(width: number, height: number, params: RedrawParams): S
 			)
 		end,
 
-		GetContent = function(self: Squircle): Content
+		GetContent = function(self: Supercorner): Content
 			return staticContent
 		end,
 
-		GetSliceCenter = function(self: Squircle): Rect
+		GetSliceCenter = function(self: Supercorner): Rect
 			return sliceCenter
 		end,
 
-		GetSliceScale = function(self: Squircle): number
+		GetSliceScale = function(self: Supercorner): number
 			return 0.5
 		end,
 
-		Destroy = function(self: Squircle)
+		Destroy = function(self: Supercorner)
 			if destroyed then return end
 			destroyed = true
 
@@ -442,19 +442,19 @@ const function NewStatic(width: number, height: number, params: RedrawParams): S
 	}
 end
 
-const function New(params: CreateParams): Squircle
-	local defaultRadius = params.CornerRadius
-	local topLeft = params.TopLeftCornerRadius or defaultRadius
-	local topRight = params.TopRightCornerRadius or defaultRadius
-	local bottomRight = params.BottomRightCornerRadius or defaultRadius
-	local bottomLeft = params.BottomLeftCornerRadius or defaultRadius
+const function New(params: CreateParams): Supercorner
+	local defaultRadius = params.Radius
+	local topLeft = params.TopLeftRadius or defaultRadius
+	local topRight = params.TopRightRadius or defaultRadius
+	local bottomRight = params.BottomRightRadius or defaultRadius
+	local bottomLeft = params.BottomLeftRadius or defaultRadius
 
 	if params.Redrawable or not CAN_CREATE_STATIC_CONTENT then
-		local maxDefault = params.MaxCornerRadius or defaultRadius
-		local maxTopLeft = params.MaxTopLeftCornerRadius or maxDefault
-		local maxTopRight = params.MaxTopRightCornerRadius or maxDefault
-		local maxBottomRight = params.MaxBottomRightCornerRadius or maxDefault
-		local maxBottomLeft = params.MaxBottomLeftCornerRadius or maxDefault
+		local maxDefault = params.MaxRadius or defaultRadius
+		local maxTopLeft = params.MaxTopLeftRadius or math.max(maxDefault, topLeft)
+		local maxTopRight = params.MaxTopRightRadius or math.max(maxDefault, topRight)
+		local maxBottomRight = params.MaxBottomRightRadius or math.max(maxDefault, bottomRight)
+		local maxBottomLeft = params.MaxBottomLeftRadius or math.max(maxDefault, bottomLeft)
 
 		local width, height = CalcSize(maxTopLeft, maxTopRight, maxBottomRight, maxBottomLeft)
 		local clampedParams = ClampToMaxRadii(params, maxTopLeft, maxTopRight, maxBottomRight, maxBottomLeft)
