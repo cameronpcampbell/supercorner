@@ -27,6 +27,8 @@ local Squircle = Supercorner.new({
 local ImageLabel = Instance.new("ImageLabel")
 ImageLabel.ImageContent = Squircle:GetContent()
 ImageLabel.ScaleType = Enum.ScaleType.Slice
+ImageLabel.SliceCenter = Squircle:GetSliceCenter()
+ImageLabel.SliceScale = Squircle:GetSliceScale()
 ImageLabel.Size = UDim2.fromOffset(200, 200)
 ImageLabel.BackgroundTransparency = 1
 ImageLabel.Parent = SomeParent
@@ -34,6 +36,16 @@ ImageLabel.Parent = SomeParent
 -- Clean up when done
 Squircle:Destroy()
 ```
+
+## Sizing
+
+Supercorner automatically calculates the image size from the corner radii. There is no need to specify a width or height manually.
+
+For supercorners with `Redrawable` set the true: `MaxTopLeftCornerRadius`, `MaxTopRightCornerRadius`, `MaxBottomRightCornerRadius`, and `MaxBottomLeftCornerRadius` control the image size. These define the largest radii you intend to use, and the image is allocated to fit them. Without these, the image is sized for the initial radii.
+
+For static (non-redrawable) supercorners: The image is always sized from the initial radii since they cannot be redrawn.
+
+If a redraw exceeds the max radii, the radius is clamped and a warning is emitted.
 
 ## Static Content
 
@@ -49,8 +61,15 @@ If you need to update a supercorner after creation, pass `Redrawable = true` in 
 local Squircle = Supercorner.new({
 	CornerRadius = 24,
 	CornerSmoothing = 0.6,
+	MaxTopLeftCornerRadius = 48,
+	MaxTopRightCornerRadius = 48,
+	MaxBottomRightCornerRadius = 48,
+	MaxBottomLeftCornerRadius = 48,
 	Redrawable = true,
 })
+ImageLabel.ImageContent = Squircle:GetContent()
+ImageLabel.SliceCenter = Squircle:GetSliceCenter()
+ImageLabel.SliceScale = Squircle:GetSliceScale()
 
 -- Update corners later
 Squircle:Redraw({
@@ -60,6 +79,7 @@ Squircle:Redraw({
 	TopRightCornerRadius = 16,
 })
 ImageLabel.ImageContent = Squircle:GetContent()
+ImageLabel.SliceCenter = Squircle:GetSliceCenter()
 ```
 
-Calling `:Redraw()` on a non-redrawable (static) supercorner will throw an error. Only use `Redrawable = true` when you actually need to update corners at runtime, as it keeps the EditableImage in memory.
+Calling `:Redraw()` on a non-redrawable (static) supercorner will throw an error. Only use `Redrawable = true` when you actually need to update corners at runtime, as doing so takes up some amount of our editable memory budget.
