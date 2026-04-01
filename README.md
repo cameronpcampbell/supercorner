@@ -37,7 +37,7 @@ Squircle:Destroy()
 
 ## Static Content
 
-By default, SuperCorner converts the rendered image into static content using [`CreateDataModelContentAsync`](https://devforum.roblox.com/t/studio-beta-introducing-createdatamodelcontent-convert-editable-mesh-and-image-data-into-static-content/4541898). This frees up the editable memory budget since most supercorner's don't need to change after creation.
+By default, Supercorner converts the rendered image into static content using [`CreateDataModelContentAsync`](https://devforum.roblox.com/t/studio-beta-introducing-createdatamodelcontent-convert-editable-mesh-and-image-data-into-static-content/4541898). This frees up the editable memory budget since most supercorner's don't need to change after creation.
 
 This requires the **Enable Mesh/Image to static content conversion API** beta feature to be enabled. If the feature is not enabled, Supercorner will automatically fall back to keeping the EditableImage alive.
 
