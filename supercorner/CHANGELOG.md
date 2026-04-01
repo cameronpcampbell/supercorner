@@ -1,3 +1,6 @@
+# v0.0.4
+- Fixed bug where individual corner radii were ignored in favor of `CornerRadius`.
+
 # v0.0.3
 - Renamed `Radius` to `CornerRadius`.
 

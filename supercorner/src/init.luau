@@ -110,13 +110,13 @@ const function Render(state: SupercornerState, params: RedrawParams)
 		height = height,
 		cornerRadius = params.CornerRadius * 2,
 		cornerSmoothing = clampedSmoothing,
-		topLeftRadius =
+		topLeftCornerRadius =
 		    if topLeftRadius then topLeftRadius * 2 else nil,
-		topRightRadius =
+		topRightCornerRadius =
 		    if topRightRadius then topRightRadius * 2 else nil,
-		bottomRightRadius =
+		bottomRightCornerRadius =
 		    if bottomRightRadius then bottomRightRadius * 2 else nil,
-		bottomLeftRadius =
+		bottomLeftCornerRadius =
 		    if bottomLeftRadius then bottomLeftRadius * 2 else nil,
 		preserveSmoothing = params.PreserveSmoothing,
 	})
