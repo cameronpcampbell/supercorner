@@ -1,0 +1,23 @@
+{
+    "name": "packages",
+    "tree": {
+        "$className": "Folder",
+        "$path": "packages_no_index.project.json",
+
+        "supercorner-react": {
+            "$path": "supercorner_react_index.luau"
+        },
+
+        "_Index": {
+            "$path": "Packages/_Index",
+
+            "SUPERCORNER_REACT": {
+                "$className": "Folder",
+
+                "supercorner-react": {
+                    "$path": "default.project.json"
+                }
+            }
+        }
+    }
+}
