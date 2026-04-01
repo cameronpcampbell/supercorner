@@ -9,7 +9,7 @@ const GRID_COLS = 4
 const GRID_ROWS = 4
 const CELL_SIZE = 100
 const GAP = 10
-const RADIUS = 25
+const CORNER_RADIUS = 25
 const CORNER_SMOOTHING = 1.
 
 const ScreenGui = Instance.new("ScreenGui")
@@ -53,7 +53,7 @@ local contents: { Content } = {}
 
 for i = 1, GRID_COLS * GRID_ROWS do
 	local squircle = Supercorner.new({
-		Radius =RADIUS,
+		CornerRadius = CORNER_RADIUS,
 		CornerSmoothing = CORNER_SMOOTHING,
 		Redrawable = i == 1,
 	})
@@ -102,13 +102,13 @@ end
 print(`[cache test] {count} squircles created, editable cache: {cacheSize}, static cache: {staticCacheSize}`)
 
 -- Animate the first squircle's corner radius down to 0
-local radius = RADIUS
+local radius = CORNER_RADIUS
 
 while radius > 0 do
 	radius = math.max(0, radius - 1)
 
 	squircles[1]:Redraw({
-		Radius =radius,
+		CornerRadius = radius,
 		CornerSmoothing = CORNER_SMOOTHING,
 	})
 

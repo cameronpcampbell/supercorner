@@ -8,13 +8,13 @@ const Rasterize = require("@self/rasterize")
 const AssetService = game:GetService("AssetService")
 
 export type CreateParams = {
-	Radius: number,
+	CornerRadius: number,
 	CornerSmoothing: number,
 	TopLeftRadius: number?,
 	TopRightRadius: number?,
 	BottomRightRadius: number?,
 	BottomLeftRadius: number?,
-	MaxRadius: number?,
+	MaxCornerRadius: number?,
 	MaxTopLeftRadius: number?,
 	MaxTopRightRadius: number?,
 	MaxBottomRightRadius: number?,
@@ -25,7 +25,7 @@ export type CreateParams = {
 }
 
 export type RedrawParams = {
-	Radius: number,
+	CornerRadius: number,
 	CornerSmoothing: number,
 	TopLeftRadius: number?,
 	TopRightRadius: number?,
@@ -81,7 +81,7 @@ const CacheKeyBuf = buffer.create(66)
 const function GetCacheKey(width: number, height: number, params: RedrawParams): string
 	buffer.writef64(CacheKeyBuf, 0, width)
 	buffer.writef64(CacheKeyBuf, 8, height)
-	buffer.writef64(CacheKeyBuf, 16, params.Radius)
+	buffer.writef64(CacheKeyBuf, 16, params.CornerRadius)
 	buffer.writef64(CacheKeyBuf, 24, params.CornerSmoothing)
 	buffer.writef64(CacheKeyBuf, 32, if params.TopLeftRadius ~= nil then params.TopLeftRadius else -1)
 	buffer.writef64(CacheKeyBuf, 40, if params.TopRightRadius ~= nil then params.TopRightRadius else -1)
@@ -108,7 +108,7 @@ const function Render(state: SupercornerState, params: RedrawParams)
 	const ops = FigmaSquircle.get_svg_path({
 		width = width,
 		height = height,
-		cornerRadius = params.Radius * 2,
+		cornerRadius = params.CornerRadius * 2,
 		cornerSmoothing = clampedSmoothing,
 		topLeftRadius =
 		    if topLeftRadius then topLeftRadius * 2 else nil,
@@ -157,7 +157,7 @@ const function ClampToMaxRadii(
 	maxBottomRight: number,
 	maxBottomLeft: number
 ): RedrawParams
-	local defaultRadius = params.Radius
+	local defaultRadius = params.CornerRadius
 	local topLeft = params.TopLeftRadius or defaultRadius
 	local topRight = params.TopRightRadius or defaultRadius
 	local bottomRight = params.BottomRightRadius or defaultRadius
@@ -194,7 +194,7 @@ const function ClampToMaxRadii(
 	end
 
 	return {
-		Radius = math.min(defaultRadius, maxTopLeft, maxTopRight, maxBottomRight, maxBottomLeft),
+		CornerRadius = math.min(defaultRadius, maxTopLeft, maxTopRight, maxBottomRight, maxBottomLeft),
 		CornerSmoothing = params.CornerSmoothing,
 		TopLeftRadius = topLeft,
 		TopRightRadius = topRight,
@@ -211,7 +211,7 @@ end
 -- so that no corner is cut by the 9-slice.
 const function CalcSliceCenter(width: number, height: number, params: RedrawParams): Rect
 	local smoothing = math.min(params.CornerSmoothing, 1 - 1e-6)
-	local defaultRadius = params.Radius
+	local defaultRadius = params.CornerRadius
 	local factor = (1 + smoothing) * 2
 
 	local topLeftExtension = (params.TopLeftRadius or defaultRadius) * factor
@@ -443,14 +443,14 @@ const function NewStatic(width: number, height: number, params: RedrawParams): S
 end
 
 const function New(params: CreateParams): Supercorner
-	local defaultRadius = params.Radius
+	local defaultRadius = params.CornerRadius
 	local topLeft = params.TopLeftRadius or defaultRadius
 	local topRight = params.TopRightRadius or defaultRadius
 	local bottomRight = params.BottomRightRadius or defaultRadius
 	local bottomLeft = params.BottomLeftRadius or defaultRadius
 
 	if params.Redrawable or not CAN_CREATE_STATIC_CONTENT then
-		local maxDefault = params.MaxRadius or defaultRadius
+		local maxDefault = params.MaxCornerRadius or defaultRadius
 		local maxTopLeft = params.MaxTopLeftRadius or math.max(maxDefault, topLeft)
 		local maxTopRight = params.MaxTopRightRadius or math.max(maxDefault, topRight)
 		local maxBottomRight = params.MaxBottomRightRadius or math.max(maxDefault, bottomRight)

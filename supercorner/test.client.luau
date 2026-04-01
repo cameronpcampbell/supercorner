@@ -93,7 +93,7 @@ NativeCorner.CornerRadius = UDim.new(0, 45)
 NativeCorner.Parent = NativeFrame
 
 -- State
-local Radius = 45
+local CornerRadius = 45
 local CornerSmoothing = 1
 local TopLeftRadius: number? = nil
 local TopRightRadius: number? = nil
@@ -101,7 +101,7 @@ local BottomRightRadius: number? = nil
 local BottomLeftRadius: number? = nil
 
 const squircle = Supercorner.new({
-	Radius = Radius,
+	CornerRadius = CornerRadius,
 	CornerSmoothing = CornerSmoothing,
 	MaxTopLeftRadius = SIZE,
 	MaxTopRightRadius = SIZE,
@@ -118,7 +118,7 @@ ImageLabel.ScaleType = Enum.ScaleType.Slice
 
 local function Redraw()
 	squircle:Redraw({
-		Radius = Radius,
+		CornerRadius = CornerRadius,
 		CornerSmoothing = CornerSmoothing,
 		TopLeftRadius = TopLeftRadius,
 		TopRightRadius = TopRightRadius,
@@ -284,22 +284,22 @@ end
 -- Supercorner sliders
 local SupercornerSliderOrder = 2
 
-table.insert(CornerSetters, CreateSlider("Top Left Radius", 0, SIZE, Radius, 1, SupercornerSliderOrder, SupercornerColumn, function(value)
+table.insert(CornerSetters, CreateSlider("Top Left Radius", 0, SIZE, CornerRadius, 1, SupercornerSliderOrder, SupercornerColumn, function(value)
 	corner_changed(value, 1)
 end))
 SupercornerSliderOrder += 1
 
-table.insert(CornerSetters, CreateSlider("Top Right Radius", 0, SIZE, Radius, 1, SupercornerSliderOrder, SupercornerColumn, function(value)
+table.insert(CornerSetters, CreateSlider("Top Right Radius", 0, SIZE, CornerRadius, 1, SupercornerSliderOrder, SupercornerColumn, function(value)
 	corner_changed(value, 2)
 end))
 SupercornerSliderOrder += 1
 
-table.insert(CornerSetters, CreateSlider("Bottom Right Radius", 0, SIZE, Radius, 1, SupercornerSliderOrder, SupercornerColumn, function(value)
+table.insert(CornerSetters, CreateSlider("Bottom Right Radius", 0, SIZE, CornerRadius, 1, SupercornerSliderOrder, SupercornerColumn, function(value)
 	corner_changed(value, 3)
 end))
 SupercornerSliderOrder += 1
 
-table.insert(CornerSetters, CreateSlider("Bottom Left Radius", 0, SIZE, Radius, 1, SupercornerSliderOrder, SupercornerColumn, function(value)
+table.insert(CornerSetters, CreateSlider("Bottom Left Radius", 0, SIZE, CornerRadius, 1, SupercornerSliderOrder, SupercornerColumn, function(value)
 	corner_changed(value, 4)
 end))
 SupercornerSliderOrder += 1
@@ -310,6 +310,6 @@ CreateSlider("Corner Smoothing", 0, 1, CornerSmoothing, 0.01, SupercornerSliderO
 end)
 
 -- Native slider
-table.insert(CornerSetters, CreateSlider("Corner Radius", 0, SIZE, Radius, 1, 2, NativeColumn, function(value)
+table.insert(CornerSetters, CreateSlider("Corner Radius", 0, SIZE, CornerRadius, 1, 2, NativeColumn, function(value)
 	corner_changed(value, 5)
 end))
