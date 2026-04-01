@@ -17,8 +17,9 @@ jobs:
       - name: Check wally.toml version matches tag
         run: |
           TAG="${{ github.ref_name }}"
-          WALLY_VERSION="v$(grep -m1 '^version' wally.toml | sed 's/.*"\(.*\)".*/\1/')"
-          if [ "$WALLY_VERSION" != "$TAG" ]; then
+          WALLY_VERSION="$(grep -m1 '^version' wally.toml | sed 's/.*"\(.*\)".*/\1/')"
+          TAG_VERSION="${TAG#supercorner-v}"
+          if [ "$WALLY_VERSION" != "$TAG_VERSION" ]; then
             echo "::error::wally.toml version ($WALLY_VERSION) does not match tag ($TAG). Update the version in wally.toml before releasing."
             exit 1
           fi
@@ -65,7 +66,7 @@ jobs:
           CHANGELOG=$(printf '%s' "$CHANGELOG" | sed 's/^#/##/')
 
           # Strip leading 'v' for wally version URL
-          VERSION="${TAG#v}"
+          VERSION="${TAG#supercorner-v}"
           WALLY_URL="https://wally.run/package/cameronpcampbell/supercorner?version=${VERSION}"
 
           cat > /tmp/release_body.md << EOF
