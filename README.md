@@ -1,8 +1,8 @@
-# SuperCorner
+# Supercorner
 
 A Figma-inspired UICorner alternative for Roblox.
 
-Benefits to SuperCorner:
+Benefits to Supercorner:
 - Supports individual corner radii.
 - Supports corner smoothing (squircles).
 
@@ -31,6 +31,27 @@ ImageLabel.Size = UDim2.fromOffset(200, 200)
 ImageLabel.BackgroundTransparency = 1
 ImageLabel.Parent = SomeParent
 
+-- Clean up when done
+Squircle:Destroy()
+```
+
+## Static Content
+
+By default, SuperCorner converts the rendered image into static content using [`CreateDataModelContentAsync`](https://devforum.roblox.com/t/studio-beta-introducing-createdatamodelcontent-convert-editable-mesh-and-image-data-into-static-content/4541898). This frees up the editable memory budget since most supercorner's don't need to change after creation.
+
+This requires the **Enable Mesh/Image to static content conversion API** beta feature to be enabled. If the feature is not enabled, Supercorner will automatically fall back to keeping the EditableImage alive.
+
+## Redrawing
+
+If you need to update a supercorner after creation, pass `Redrawable = true` in the constructor:
+
+```luau
+local Squircle = Supercorner.new({
+	CornerRadius = 24,
+	CornerSmoothing = 0.6,
+	Redrawable = true,
+})
+
 -- Update corners later
 Squircle:Redraw({
 	CornerRadius = 32,
@@ -39,7 +60,6 @@ Squircle:Redraw({
 	TopRightCornerRadius = 16,
 })
 ImageLabel.ImageContent = Squircle:GetContent()
-
--- Clean up when done
-Squircle:Destroy()
 ```
+
+Calling `:Redraw()` on a non-redrawable (static) supercorner will throw an error. Only use `Redrawable = true` when you actually need to update corners at runtime, as it keeps the EditableImage in memory.
