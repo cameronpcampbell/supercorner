@@ -2,12 +2,15 @@ name: Release
 
 on:
   push:
-    tags: ["v*"]
+    tags: ["supercorner-v*"]
 
 jobs:
   preflight:
     name: Preflight Checks
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: supercorner
     steps:
       - uses: actions/checkout@v6
 
@@ -51,7 +54,7 @@ jobs:
               if ($0 == "# " tag) { found=1; next }
             }
             found { print }
-          ' CHANGELOG.md | sed '/./,$!d' | sed -e :a -e '/^\n*$/{$d;N;ba}')
+          ' supercorner/CHANGELOG.md | sed '/./,$!d' | sed -e :a -e '/^\n*$/{$d;N;ba}')
 
           if [ -z "$CHANGELOG" ]; then
             echo "::error::No changelog entry found for $TAG in CHANGELOG.md"
@@ -111,6 +114,7 @@ jobs:
           key: rokit-${{ hashFiles('rokit.toml') }}
 
       - name: Publish to Wally
+        working-directory: supercorner
         run: |
           export PATH="$HOME/.rokit/bin:$PATH"
           mkdir -p ~/.wally
