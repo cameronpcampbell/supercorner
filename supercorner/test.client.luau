@@ -101,14 +101,20 @@ local BottomRightCornerRadius: number? = nil
 local BottomLeftCornerRadius: number? = nil
 
 const squircle = Supercorner.new({
-	Width = SIZE,
-	Height = SIZE,
 	CornerRadius = CornerRadius,
-	CornerSmoothing = CornerSmoothing
+	CornerSmoothing = CornerSmoothing,
+	MaxTopLeftCornerRadius = SIZE,
+	MaxTopRightCornerRadius = SIZE,
+	MaxBottomRightCornerRadius = SIZE,
+	MaxBottomLeftCornerRadius = SIZE,
+	Redrawable = true,
 })
 
 ImageLabel.ImageColor3 = Color3.fromRGB(120, 108, 70)
 ImageLabel.ImageContent = squircle:GetContent()
+ImageLabel.SliceCenter = squircle:GetSliceCenter()
+ImageLabel.SliceScale = squircle:GetSliceScale()
+ImageLabel.ScaleType = Enum.ScaleType.Slice
 
 local function Redraw()
 	squircle:Redraw({
@@ -121,6 +127,7 @@ local function Redraw()
 	})
 
 	ImageLabel.ImageContent = squircle:GetContent()
+	ImageLabel.SliceCenter = squircle:GetSliceCenter()
 end
 
 -- Slider system

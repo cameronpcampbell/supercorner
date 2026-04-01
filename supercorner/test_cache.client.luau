@@ -53,8 +53,6 @@ local contents: { Content } = {}
 
 for i = 1, GRID_COLS * GRID_ROWS do
 	local squircle = Supercorner.new({
-		Width = CELL_SIZE,
-		Height = CELL_SIZE,
 		CornerRadius = CORNER_RADIUS,
 		CornerSmoothing = CORNER_SMOOTHING,
 		Redrawable = i == 1,
@@ -64,6 +62,9 @@ for i = 1, GRID_COLS * GRID_ROWS do
 	imageLabel.BackgroundTransparency = 1
 	imageLabel.ImageColor3 = Color3.fromRGB(120, 108, 70)
 	imageLabel.ImageContent = squircle:GetContent()
+	imageLabel.ScaleType = Enum.ScaleType.Slice
+	imageLabel.SliceCenter = squircle:GetSliceCenter()
+	imageLabel.SliceScale = squircle:GetSliceScale()
 	imageLabel.LayoutOrder = i
 	imageLabel.Parent = GridContainer
 
@@ -112,6 +113,7 @@ while radius > 0 do
 	})
 
 	imageLabels[1].ImageContent = squircles[1]:GetContent()
+	imageLabels[1].SliceCenter = squircles[1]:GetSliceCenter()
 	task.wait(0.05)
 end
 

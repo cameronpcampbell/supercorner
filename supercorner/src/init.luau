@@ -37,6 +37,8 @@ export type RedrawParams = {
 export type Squircle = {
 	Redraw: (self: Squircle, params: RedrawParams) -> (),
 	GetContent: (self: Squircle) -> Content,
+	GetSliceCenter: (self: Squircle) -> Rect,
+	GetSliceScale: (self: Squircle) -> number,
 	Destroy: (self: Squircle) -> (),
 }
 
@@ -89,15 +91,13 @@ const function GetCacheKey(width: number, height: number, params: RedrawParams):
 	return buffer.tostring(CacheKeyBuf)
 end
 
-const function render(state: SquircleState, params: RedrawParams)
+-- All geometry is rendered at 2x scale for HiDPI. Params use logical pixels;
+-- the render function doubles radii to match the internal coordinate space.
+const function Render(state: SquircleState, params: RedrawParams)
 	const width, height = state.Width, state.Height
 
-	-- Currently theres an issue with corners becoming degenerate under certain
-	-- conditions. I've found that one of the variables in this issue occuring
-	-- is the corner smoothing being `1`. So by clamping to some value just before
-	-- that we can mitigate this issue whilst still perceptually allowing for a
-	-- smoothing factor of `1`.
-	local clamped_smoothing = math.min(params.CornerSmoothing, 1 - 1e-6)
+	-- Smoothing of exactly 1 produces degenerate corners; clamp just below.
+	local clampedSmoothing = math.min(params.CornerSmoothing, 1 - 1e-6)
 
 	local topLeftCornerRadius, topRightCornerRadius =
 	    params.TopLeftCornerRadius, params.TopRightCornerRadius
@@ -108,7 +108,7 @@ const function render(state: SquircleState, params: RedrawParams)
 		width = width,
 		height = height,
 		cornerRadius = params.CornerRadius * 2,
-		cornerSmoothing = clamped_smoothing,
+		cornerSmoothing = clampedSmoothing,
 		topLeftCornerRadius =
 		    if topLeftCornerRadius then topLeftCornerRadius * 2 else nil,
 		topRightCornerRadius =
@@ -122,14 +122,14 @@ const function render(state: SquircleState, params: RedrawParams)
 
 	const antiAlias = if params.AntiAlias ~= nil then params.AntiAlias else true
 	const tolerance = if antiAlias then 1/8 else 1/4
-	const vertices, vertex_count = Flatten(ops, tolerance)
+	const vertices, vertexCount = Flatten(ops, tolerance)
 
 	buffer.fill(state.PixelBuf, 0, 0)
 
 	Rasterize(
 		state.PixelBuf,
 		vertices,
-		vertex_count,
+		vertexCount,
 		width,
 		height,
 		1, 1, 1, 1,
@@ -145,29 +145,8 @@ end
 
 const function ToStaticContent(eImage: EditableImage): Content
 	local result, content = (AssetService.CreateDataModelContentAsync :: CreateDataModelContentAsync)(AssetService, Content.fromObject(eImage))
-
 	assert(result == Enum.CreateContentResult.Success, "Failed to create static content")
 	return content
-end
-
-local function CalcSizeFromCorners(params: RedrawParams): Vector2
-	local smoothing = math.min(params.CornerSmoothing, 1 - 1e-6)
-	local default_r = params.CornerRadius
-	local tl_r = params.TopLeftCornerRadius or default_r
-	local tr_r = params.TopRightCornerRadius or default_r
-	local br_r = params.BottomRightCornerRadius or default_r
-	local bl_r = params.BottomLeftCornerRadius or default_r
-
-	local factor = 1 + smoothing
-	local tl_p = tl_r * factor
-	local tr_p = tr_r * factor
-	local br_p = br_r * factor
-	local bl_p = bl_r * factor
-
-	return Vector2.new(
-		math.max(1, math.ceil(math.max(tl_p + tr_p, bl_p + br_p))),
-		math.max(1, math.ceil(math.max(tl_p + bl_p, tr_p + br_p)))
-	)
 end
 
 const function ClampToMaxRadii(
@@ -190,16 +169,19 @@ const function ClampToMaxRadii(
 		warn(`[Supercorner] TopLeft corner radius {topLeft} exceeds max {maxTopLeft}. Clamping!`)
 		topLeft = maxTopLeft
 	end
+
 	if topRight > maxTopRight then
 		clamped = true
 		warn(`[Supercorner] TopRight corner radius {topRight} exceeds max {maxTopRight}. Clamping!`)
 		topRight = maxTopRight
 	end
+
 	if bottomRight > maxBottomRight then
 		clamped = true
 		warn(`[Supercorner] BottomRight corner radius {bottomRight} exceeds max {maxBottomRight}. Clamping!`)
 		bottomRight = maxBottomRight
 	end
+
 	if bottomLeft > maxBottomLeft then
 		clamped = true
 		warn(`[Supercorner] BottomLeft corner radius {bottomLeft} exceeds max {maxBottomLeft}. Clamping!`)
@@ -222,6 +204,43 @@ const function ClampToMaxRadii(
 	}
 end
 
+-- Each corner extends (1 + smoothing) * radius along both adjacent edges.
+-- The factor is doubled here because the image is in 2x internal pixel space.
+-- Slice boundaries sit at the max extension of corners sharing an edge,
+-- so that no corner is cut by the 9-slice.
+const function CalcSliceCenter(width: number, height: number, params: RedrawParams): Rect
+	local smoothing = math.min(params.CornerSmoothing, 1 - 1e-6)
+	local defaultRadius = params.CornerRadius
+	local factor = (1 + smoothing) * 2
+
+	local topLeftExtension = (params.TopLeftCornerRadius or defaultRadius) * factor
+	local topRightExtension = (params.TopRightCornerRadius or defaultRadius) * factor
+	local bottomRightExtension = (params.BottomRightCornerRadius or defaultRadius) * factor
+	local bottomLeftExtension = (params.BottomLeftCornerRadius or defaultRadius) * factor
+
+	return Rect.new(
+		math.max(topLeftExtension, bottomLeftExtension),
+		math.max(topLeftExtension, topRightExtension),
+		width - math.max(topRightExtension, bottomRightExtension),
+		height - math.max(bottomRightExtension, bottomLeftExtension)
+	)
+end
+
+-- The max extension factor is 2 (smoothing at its peak), so each corner
+-- occupies up to radius * 2 logical pixels along each edge.
+-- The result is then doubled for 2x internal scale.
+const function CalcSize(topLeft: number, topRight: number, bottomRight: number, bottomLeft: number): (number, number)
+	local topLeftExtension = topLeft * 2
+	local topRightExtension = topRight * 2
+	local bottomRightExtension = bottomRight * 2
+	local bottomLeftExtension = bottomLeft * 2
+
+	local width = math.max(1, math.ceil(math.max(topLeftExtension + topRightExtension, bottomLeftExtension + bottomRightExtension))) * 2
+	local height = math.max(1, math.ceil(math.max(topLeftExtension + bottomLeftExtension, topRightExtension + bottomRightExtension))) * 2
+
+	return width, height
+end
+
 const function NewRedrawable(
 	width: number,
 	height: number,
@@ -242,7 +261,7 @@ const function NewRedrawable(
 			Height = height,
 		}
 
-		render(state, params)
+		Render(state, params)
 
 		entry = {
 			state = state,
@@ -255,17 +274,20 @@ const function NewRedrawable(
 
 	local state: SquircleState = (entry :: CacheEntry).state
 	local destroyed = false
+	local sliceCenter = CalcSliceCenter(width, height, params);
 
 	(entry :: CacheEntry).refCount += 1
 
 	return {
-		Redraw = function(self: Squircle, new_params: RedrawParams)
+		Redraw = function(self: Squircle, newParams: RedrawParams)
 			if destroyed then return end
 
-			new_params = ClampToMaxRadii(new_params, maxTopLeft, maxTopRight, maxBottomRight, maxBottomLeft)
-			local newKey = GetCacheKey(width, height, new_params)
+			newParams = ClampToMaxRadii(newParams, maxTopLeft, maxTopRight, maxBottomRight, maxBottomLeft)
+			local newKey = GetCacheKey(width, height, newParams)
 
 			if entry ~= nil and entry.key == newKey then return end
+
+			sliceCenter = CalcSliceCenter(width, height, newParams)
 
 			local newEntry = Cache[newKey]
 
@@ -273,49 +295,57 @@ const function NewRedrawable(
 				local oldEImage = state.EImage
 				local ownsOldState = entry == nil or entry.refCount == 1
 
-				-- Detach from current entry
 				if entry ~= nil then
 					entry.refCount -= 1
+
 					if entry.refCount == 0 then
 						Cache[entry.key] = nil
 					end
 				end
 
-				-- Attach to existing entry
 				local newEntry = newEntry :: CacheEntry
 				newEntry.refCount += 1
 				state = newEntry.state
 
-				-- Clean up old EImage if we were the sole owner
 				if ownsOldState and oldEImage ~= state.EImage then
 					oldEImage:Destroy()
 				end
 
-			else
-				-- Detach from current entry, clone if shared
-				if entry ~= nil then
-					entry.refCount -= 1
-					if entry.refCount == 0 then
-						Cache[entry.key] = nil
-
-					else
-						state = {
-							EImage = AssetService:CreateEditableImage({ Size = Vector2.new(width, height) }),
-							PixelBuf = buffer.create(width * height * 4),
-							Width = width,
-							Height = height,
-						}
-					end
-				end
-
-				render(state, new_params)
-				entry = { state = state, refCount = 1, key = newKey }
-				Cache[newKey] = entry
+				return
 			end
+
+			-- No cache hit — reuse our state if we're the sole owner, otherwise clone
+			if entry ~= nil then
+				entry.refCount -= 1
+
+				if entry.refCount == 0 then
+					Cache[entry.key] = nil
+
+				else
+					state = {
+						EImage = AssetService:CreateEditableImage({ Size = Vector2.new(width, height) }),
+						PixelBuf = buffer.create(width * height * 4),
+						Width = width,
+						Height = height,
+					}
+				end
+			end
+
+			Render(state, newParams)
+			entry = { state = state, refCount = 1, key = newKey }
+			Cache[newKey] = entry
 		end,
 
 		GetContent = function(self: Squircle): Content
 			return Content.fromObject(state.EImage)
+		end,
+
+		GetSliceCenter = function(self: Squircle): Rect
+			return sliceCenter
+		end,
+
+		GetSliceScale = function(self: Squircle): number
+			return 0.5
 		end,
 
 		Destroy = function(self: Squircle)
@@ -359,7 +389,7 @@ const function NewStatic(width: number, height: number, params: RedrawParams): S
 			Height = height,
 		}
 
-		render(tempState, params)
+		Render(tempState, params)
 		staticContent = ToStaticContent(eImage)
 		eImage:Destroy()
 
@@ -372,8 +402,10 @@ const function NewStatic(width: number, height: number, params: RedrawParams): S
 		StaticCache[cacheKey] = staticEntry :: StaticCacheEntry
 	end
 
+	local sliceCenter = CalcSliceCenter(width, height, params)
+
 	return {
-		Redraw = function(self: Squircle, new_params: RedrawParams)
+		Redraw = function(self: Squircle, newParams: RedrawParams)
 			error(
 				"Cannot redraw a non-redrawable Supercorner. Pass `Redrawable = true` in the"
 				.. " constructor params to enable redrawing. You can also call `:SetRedrawable(true)`"
@@ -383,6 +415,14 @@ const function NewStatic(width: number, height: number, params: RedrawParams): S
 
 		GetContent = function(self: Squircle): Content
 			return staticContent
+		end,
+
+		GetSliceCenter = function(self: Squircle): Rect
+			return sliceCenter
+		end,
+
+		GetSliceScale = function(self: Squircle): number
+			return 0.5
 		end,
 
 		Destroy = function(self: Squircle)
@@ -401,19 +441,7 @@ const function NewStatic(width: number, height: number, params: RedrawParams): S
 	}
 end
 
-const function CalcSize(topLeft: number, topRight: number, bottomRight: number, bottomLeft: number): (number, number)
-	local topLeftExtension = topLeft * 2
-	local topRightExtension = topRight * 2
-	local bottomRightExtension = bottomRight * 2
-	local bottomLeftExtension = bottomLeft * 2
-
-	local width = math.max(1, math.ceil(math.max(topLeftExtension + topRightExtension, bottomLeftExtension + bottomRightExtension))) * 2
-	local height = math.max(1, math.ceil(math.max(topLeftExtension + bottomLeftExtension, topRightExtension + bottomRightExtension))) * 2
-
-	return width, height
-end
-
-const function new(params: CreateParams): Squircle
+const function New(params: CreateParams): Squircle
 	local defaultRadius = params.CornerRadius
 	local topLeft = params.TopLeftCornerRadius or defaultRadius
 	local topRight = params.TopRightCornerRadius or defaultRadius
@@ -439,23 +467,26 @@ end
 
 local function GetCacheSize(): number
 	local count = 0
+
 	for _ in Cache do
 		count += 1
 	end
+
 	return count
 end
 
 local function GetStaticCacheSize(): number
 	local count = 0
+
 	for _ in StaticCache do
 		count += 1
 	end
+
 	return count
 end
 
 return {
-	new = new,
-	CalcSizeFromCorners = CalcSizeFromCorners,
+	new = New,
 	GetCacheSize = GetCacheSize,
 	GetStaticCacheSize = GetStaticCacheSize,
 }
