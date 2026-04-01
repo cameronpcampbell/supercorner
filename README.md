@@ -65,6 +65,7 @@ local Squircle = Supercorner.new({
 	Redrawable = true,
 })
 ImageLabel.ImageContent = Squircle:GetContent()
+ImageLabel.ScaleType = Enum.ScaleType.Slice
 ImageLabel.SliceCenter = Squircle:GetSliceCenter()
 ImageLabel.SliceScale = Squircle:GetSliceScale()
 
