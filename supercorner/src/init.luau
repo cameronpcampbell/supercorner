@@ -17,7 +17,8 @@ export type CreateParams = {
 	BottomRightCornerRadius: number?,
 	BottomLeftCornerRadius: number?,
 	PreserveSmoothing: boolean?,
-	AntiAlias: boolean?
+	AntiAlias: boolean?,
+	Redrawable: boolean?,
 }
 
 export type RedrawParams = {
@@ -50,7 +51,14 @@ type CacheEntry = {
 	key: string,
 }
 
+type StaticCacheEntry = {
+	content: Content,
+	refCount: number,
+	key: string,
+}
+
 const Cache: { [string]: CacheEntry } = {}
+const StaticCache: { [string]: StaticCacheEntry } = {}
 const CacheKeyBuf = buffer.create(66)
 
 const function GetCacheKey(width: number, height: number, params: RedrawParams): string
@@ -121,6 +129,25 @@ const function render(state: SquircleState, params: RedrawParams)
 	)
 end
 
+const CAN_CREATE_STATIC_CONTENT = (function()
+    const ok, data = pcall(
+        AssetService.CreateDataModelContentAsync, AssetService, Content.none, nil
+    )
+
+    return if ok then ok else data ~= "CreateDataModelContentAsync is not available yet"
+end)()
+
+type CreateDataModelContentAsync =
+    (self: AssetService, content: Content, options: { [string]: any }?)
+        -> (Enum.CreateContentResult, Content)
+
+const function ToStaticContent(eImage: EditableImage): Content
+	local result, content = (AssetService.CreateDataModelContentAsync :: CreateDataModelContentAsync)(AssetService, Content.fromObject(eImage))
+
+	assert(result == Enum.CreateContentResult.Success, "Failed to create static content")
+	return content
+end
+
 local function CalcSizeFromCorners(params: RedrawParams): Vector2
 	local smoothing = math.min(params.CornerSmoothing, 1 - 1e-6)
 	local default_r = params.CornerRadius
@@ -141,9 +168,7 @@ local function CalcSizeFromCorners(params: RedrawParams): Vector2
 	)
 end
 
-const function new(params: CreateParams): Squircle
-	local width, height = params.Width * 2, params.Height * 2
-	local cacheKey = GetCacheKey(width, height, params)
+const function NewRedrawable(width: number, height: number, cacheKey: string, params: RedrawParams): Squircle
 	local entry: CacheEntry? = Cache[cacheKey]
 
 	if entry == nil then
@@ -170,7 +195,7 @@ const function new(params: CreateParams): Squircle
 
 	(entry :: CacheEntry).refCount += 1
 
-	local squircle: Squircle = {
+	return {
 		Redraw = function(self: Squircle, new_params: RedrawParams)
 			if destroyed then return end
 
@@ -242,14 +267,84 @@ const function new(params: CreateParams): Squircle
 				end
 
 				entry = nil
-			else
 
+			else
 				state.EImage:Destroy()
 			end
 		end,
 	}
+end
 
-	return squircle
+const function NewStatic(width: number, height: number, cacheKey: string, params: RedrawParams): Squircle
+	local staticEntry: StaticCacheEntry? = StaticCache[cacheKey]
+	local destroyed = false
+	local staticContent: Content
+
+	if staticEntry ~= nil then
+		(staticEntry :: StaticCacheEntry).refCount += 1
+		staticContent = (staticEntry :: StaticCacheEntry).content
+
+	else
+		local eImage = AssetService:CreateEditableImage({ Size = Vector2.new(width, height) })
+
+		local tempState: SquircleState = {
+			EImage = eImage,
+			PixelBuf = buffer.create(width * height * 4),
+			Width = width,
+			Height = height,
+		}
+
+		render(tempState, params)
+		staticContent = ToStaticContent(eImage)
+		eImage:Destroy()
+
+		staticEntry = {
+			content = staticContent,
+			refCount = 1,
+			key = cacheKey,
+		}
+
+		StaticCache[cacheKey] = staticEntry :: StaticCacheEntry
+	end
+
+	return {
+		Redraw = function(self: Squircle, new_params: RedrawParams)
+			error(
+				"Cannot redraw a non-redrawable Supercorner. Pass `Redrawable = true` in the"
+				.. " constructor params to enable redrawing. You can also call `:SetRedrawable(true)`"
+				.. " on an existing instance, however the former is strongly preferred."
+			)
+		end,
+
+		GetContent = function(self: Squircle): Content
+			return staticContent
+		end,
+
+		Destroy = function(self: Squircle)
+			if destroyed then return end
+			destroyed = true
+
+			if staticEntry == nil then return end
+
+			local staticEntry = staticEntry :: StaticCacheEntry
+			staticEntry.refCount -= 1
+
+			if staticEntry.refCount == 0 then
+				StaticCache[staticEntry.key] = nil
+			end
+		end,
+	}
+end
+
+const function new(params: CreateParams): Squircle
+	local width, height = params.Width * 2, params.Height * 2
+	local cacheKey = GetCacheKey(width, height, params)
+
+	if params.Redrawable or not CAN_CREATE_STATIC_CONTENT then
+		return NewRedrawable(width, height, cacheKey, params)
+	end
+
+	return NewStatic(width, height, cacheKey, params)
 end
 
 local function GetCacheSize(): number
@@ -260,8 +355,17 @@ local function GetCacheSize(): number
 	return count
 end
 
+local function GetStaticCacheSize(): number
+	local count = 0
+	for _ in StaticCache do
+		count += 1
+	end
+	return count
+end
+
 return {
 	new = new,
 	CalcSizeFromCorners = CalcSizeFromCorners,
 	GetCacheSize = GetCacheSize,
+	GetStaticCacheSize = GetStaticCacheSize,
 }

@@ -57,6 +57,7 @@ for i = 1, GRID_COLS * GRID_ROWS do
 		Height = CELL_SIZE,
 		CornerRadius = CORNER_RADIUS,
 		CornerSmoothing = CORNER_SMOOTHING,
+		Redrawable = i == 1,
 	})
 
 	local imageLabel = Instance.new("ImageLabel")
@@ -71,30 +72,33 @@ for i = 1, GRID_COLS * GRID_ROWS do
 	table.insert(contents, squircle:GetContent())
 end
 
--- Verify all instances share the same Content (same underlying EditableImage)
-local allShared = true
-local firstContent = contents[1]
+-- Verify static instances share the same Content (indices 2+)
+local allStaticShared = true
+local firstStaticContent = contents[2]
 
-for i = 2, #contents do
-	if contents[i] ~= firstContent then
-		allShared = false
+for i = 3, #contents do
+	if contents[i] ~= firstStaticContent then
+		allStaticShared = false
 		break
 	end
 end
 
 local count = GRID_COLS * GRID_ROWS
+local allShared = allStaticShared
 
 local cacheSize = Supercorner.GetCacheSize()
+local staticCacheSize = Supercorner.GetStaticCacheSize()
 
 if allShared then
-	StatusLabel.Text = `PASS: {count} squircles sharing 1 EditableImage (cache entries: {cacheSize})`
+	StatusLabel.Text = `PASS: {count} squircles sharing 1 entry (editable: {cacheSize}, static: {staticCacheSize})`
 	StatusLabel.TextColor3 = Color3.fromRGB(46, 139, 87)
+
 else
-	StatusLabel.Text = `FAIL: squircles are NOT sharing the same EditableImage (cache entries: {cacheSize})`
+	StatusLabel.Text = `FAIL: squircles are NOT sharing the same entry (editable: {cacheSize}, static: {staticCacheSize})`
 	StatusLabel.TextColor3 = Color3.fromRGB(200, 50, 50)
 end
 
-print(`[cache test] {count} squircles created, {cacheSize} cache entries`)
+print(`[cache test] {count} squircles created, editable cache: {cacheSize}, static cache: {staticCacheSize}`)
 
 -- Animate the first squircle's corner radius down to 0
 local radius = CORNER_RADIUS
@@ -111,4 +115,4 @@ while radius > 0 do
 	task.wait(0.05)
 end
 
-print(`[cache test] first squircle redraw complete, cache entries: {Supercorner.GetCacheSize()}`)
+print(`[cache test] first squircle redraw complete, editable cache: {Supercorner.GetCacheSize()}, static cache: {Supercorner.GetStaticCacheSize()}`)
