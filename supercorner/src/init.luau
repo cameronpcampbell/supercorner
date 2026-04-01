@@ -225,13 +225,13 @@ end
 const function NewRedrawable(
 	width: number,
 	height: number,
-	cacheKey: string,
 	params: RedrawParams,
 	maxTopLeft: number,
 	maxTopRight: number,
 	maxBottomRight: number,
 	maxBottomLeft: number
 ): Squircle
+	local cacheKey = GetCacheKey(width, height, params)
 	local entry: CacheEntry? = Cache[cacheKey]
 
 	if entry == nil then
@@ -339,7 +339,8 @@ const function NewRedrawable(
 	}
 end
 
-const function NewStatic(width: number, height: number, cacheKey: string, params: RedrawParams): Squircle
+const function NewStatic(width: number, height: number, params: RedrawParams): Squircle
+	local cacheKey = GetCacheKey(width, height, params)
 	local staticEntry: StaticCacheEntry? = StaticCache[cacheKey]
 	local destroyed = false
 	local staticContent: Content
@@ -400,29 +401,40 @@ const function NewStatic(width: number, height: number, cacheKey: string, params
 	}
 end
 
-const function new(params: CreateParams): Squircle
-	local defaultRadius = params.CornerRadius
-	local maxTopLeft = params.MaxTopLeftCornerRadius or params.TopLeftCornerRadius or defaultRadius
-	local maxTopRight = params.MaxTopRightCornerRadius or params.TopRightCornerRadius or defaultRadius
-	local maxBottomRight = params.MaxBottomRightCornerRadius or params.BottomRightCornerRadius or defaultRadius
-	local maxBottomLeft = params.MaxBottomLeftCornerRadius or params.BottomLeftCornerRadius or defaultRadius
-
-	local topLeftExtension = maxTopLeft * 2
-	local topRightExtension = maxTopRight * 2
-	local bottomRightExtension = maxBottomRight * 2
-	local bottomLeftExtension = maxBottomLeft * 2
+const function CalcSize(topLeft: number, topRight: number, bottomRight: number, bottomLeft: number): (number, number)
+	local topLeftExtension = topLeft * 2
+	local topRightExtension = topRight * 2
+	local bottomRightExtension = bottomRight * 2
+	local bottomLeftExtension = bottomLeft * 2
 
 	local width = math.max(1, math.ceil(math.max(topLeftExtension + topRightExtension, bottomLeftExtension + bottomRightExtension))) * 2
 	local height = math.max(1, math.ceil(math.max(topLeftExtension + bottomLeftExtension, topRightExtension + bottomRightExtension))) * 2
 
-	local clampedParams = ClampToMaxRadii(params, maxTopLeft, maxTopRight, maxBottomRight, maxBottomLeft)
-	local cacheKey = GetCacheKey(width, height, clampedParams)
+	return width, height
+end
+
+const function new(params: CreateParams): Squircle
+	local defaultRadius = params.CornerRadius
+	local topLeft = params.TopLeftCornerRadius or defaultRadius
+	local topRight = params.TopRightCornerRadius or defaultRadius
+	local bottomRight = params.BottomRightCornerRadius or defaultRadius
+	local bottomLeft = params.BottomLeftCornerRadius or defaultRadius
 
 	if params.Redrawable or not CAN_CREATE_STATIC_CONTENT then
-		return NewRedrawable(width, height, cacheKey, clampedParams, maxTopLeft, maxTopRight, maxBottomRight, maxBottomLeft)
+		local maxTopLeft = params.MaxTopLeftCornerRadius or topLeft
+		local maxTopRight = params.MaxTopRightCornerRadius or topRight
+		local maxBottomRight = params.MaxBottomRightCornerRadius or bottomRight
+		local maxBottomLeft = params.MaxBottomLeftCornerRadius or bottomLeft
+
+		local width, height = CalcSize(maxTopLeft, maxTopRight, maxBottomRight, maxBottomLeft)
+		local clampedParams = ClampToMaxRadii(params, maxTopLeft, maxTopRight, maxBottomRight, maxBottomLeft)
+
+		return NewRedrawable(width, height, clampedParams, maxTopLeft, maxTopRight, maxBottomRight, maxBottomLeft)
 	end
 
-	return NewStatic(width, height, cacheKey, clampedParams)
+	local width, height = CalcSize(topLeft, topRight, bottomRight, bottomLeft)
+
+	return NewStatic(width, height, params)
 end
 
 local function GetCacheSize(): number
