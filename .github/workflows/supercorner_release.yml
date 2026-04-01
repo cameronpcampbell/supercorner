@@ -86,9 +86,9 @@ jobs:
 
           if gh release view "$TAG" > /dev/null 2>&1; then
             echo "Release $TAG already exists. Updating."
-            gh release edit "$TAG" --draft --title "SuperCorner $TAG" --notes-file /tmp/release_body.md
+            gh release edit "$TAG" --draft --title "SuperCorner $VERSION" --notes-file /tmp/release_body.md
           else
-            gh release create "$TAG" --draft --verify-tag --title "SuperCorner $TAG" --notes-file /tmp/release_body.md
+            gh release create "$TAG" --draft --verify-tag --title "SuperCorner $VERSION" --notes-file /tmp/release_body.md
           fi
 
       - name: Rokit Cache Restore
