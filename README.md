@@ -14,6 +14,19 @@ Benefits to Supercorner:
 
 <img src="demo.png" alt="comparison between supercorner and uicorner" width="400">
 
+## UI Framework Support
+
+- [React-luau](https://github.com/cameronpcampbell/supercorner/tree/main/supercorner_react)
+
+## Installation
+
+Add to your `wally.toml`:
+
+```toml
+[dependencies]
+supercorner = "cameronpcampbell/supercorner@{version}"
+```
+
 ## Usage
 
 ```luau
