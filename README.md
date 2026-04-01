@@ -41,7 +41,7 @@ Squircle:Destroy()
 
 Supercorner automatically calculates the image size from the corner radii. There is no need to specify a width or height manually.
 
-For supercorners with `Redrawable` set the true: `MaxTopLeftCornerRadius`, `MaxTopRightCornerRadius`, `MaxBottomRightCornerRadius`, and `MaxBottomLeftCornerRadius` control the image size. These define the largest radii you intend to use, and the image is allocated to fit them. Without these, the image is sized for the initial radii.
+For supercorners with `Redrawable` set the true: `MaxCornerRadius` (or the per-corner variants `MaxTopLeftCornerRadius`, `MaxTopRightCornerRadius`, `MaxBottomRightCornerRadius`, `MaxBottomLeftCornerRadius`) control the image size. These define the largest radii you intend to use, and the image is allocated to fit them. Without these, the image is sized for the initial radii.
 
 For static (non-redrawable) supercorners: The image is always sized from the initial radii since they cannot be redrawn.
 
@@ -61,10 +61,7 @@ If you need to update a supercorner after creation, pass `Redrawable = true` in 
 local Squircle = Supercorner.new({
 	CornerRadius = 24,
 	CornerSmoothing = 0.6,
-	MaxTopLeftCornerRadius = 48,
-	MaxTopRightCornerRadius = 48,
-	MaxBottomRightCornerRadius = 48,
-	MaxBottomLeftCornerRadius = 48,
+	MaxCornerRadius = 48,
 	Redrawable = true,
 })
 ImageLabel.ImageContent = Squircle:GetContent()

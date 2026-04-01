@@ -14,6 +14,7 @@ export type CreateParams = {
 	TopRightCornerRadius: number?,
 	BottomRightCornerRadius: number?,
 	BottomLeftCornerRadius: number?,
+	MaxCornerRadius: number?,
 	MaxTopLeftCornerRadius: number?,
 	MaxTopRightCornerRadius: number?,
 	MaxBottomRightCornerRadius: number?,
@@ -449,10 +450,11 @@ const function New(params: CreateParams): Squircle
 	local bottomLeft = params.BottomLeftCornerRadius or defaultRadius
 
 	if params.Redrawable or not CAN_CREATE_STATIC_CONTENT then
-		local maxTopLeft = params.MaxTopLeftCornerRadius or topLeft
-		local maxTopRight = params.MaxTopRightCornerRadius or topRight
-		local maxBottomRight = params.MaxBottomRightCornerRadius or bottomRight
-		local maxBottomLeft = params.MaxBottomLeftCornerRadius or bottomLeft
+		local maxDefault = params.MaxCornerRadius or defaultRadius
+		local maxTopLeft = params.MaxTopLeftCornerRadius or maxDefault
+		local maxTopRight = params.MaxTopRightCornerRadius or maxDefault
+		local maxBottomRight = params.MaxBottomRightCornerRadius or maxDefault
+		local maxBottomLeft = params.MaxBottomLeftCornerRadius or maxDefault
 
 		local width, height = CalcSize(maxTopLeft, maxTopRight, maxBottomRight, maxBottomLeft)
 		local clampedParams = ClampToMaxRadii(params, maxTopLeft, maxTopRight, maxBottomRight, maxBottomLeft)
