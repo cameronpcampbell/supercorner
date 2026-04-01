@@ -143,8 +143,6 @@ return function(props: T.Flatten<Supercorner.CreateParams & {
             warn("[Supercorner React] Failed to create Supercorner, possibly due to the editable memory budget being reached. Falling back to UICorner.")
         end
 
-        print(Supercorner:GetCacheSize(), Supercorner:GetStaticCacheSize())
-
         return supercorner
     end) :: any
 
