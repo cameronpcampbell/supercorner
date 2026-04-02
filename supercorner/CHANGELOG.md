@@ -1,3 +1,6 @@
+# v0.0.5
+- `CornerRadius` and `CornerSmoothing` are now optional, defaulting to `0` and `1` respectively.
+
 # v0.0.4
 - Fixed bug where individual corner radii were ignored in favor of `CornerRadius`.
 

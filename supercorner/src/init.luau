@@ -8,8 +8,8 @@ const Rasterize = require("@self/rasterize")
 const AssetService = game:GetService("AssetService")
 
 export type CreateParams = {
-	CornerRadius: number,
-	CornerSmoothing: number,
+	CornerRadius: number?,
+	CornerSmoothing: number?,
 	TopLeftRadius: number?,
 	TopRightRadius: number?,
 	BottomRightRadius: number?,
@@ -25,8 +25,8 @@ export type CreateParams = {
 }
 
 export type RedrawParams = {
-	CornerRadius: number,
-	CornerSmoothing: number,
+	CornerRadius: number?,
+	CornerSmoothing: number?,
 	TopLeftRadius: number?,
 	TopRightRadius: number?,
 	BottomRightRadius: number?,
@@ -283,6 +283,9 @@ const function NewRedrawable(
 		Redraw = function(self: Supercorner, newParams: RedrawParams)
 			if destroyed then return end
 
+			newParams.CornerRadius = newParams.CornerRadius or 0
+			newParams.CornerSmoothing = newParams.CornerSmoothing or 1
+
 			newParams = ClampToMaxRadii(newParams, maxTopLeft, maxTopRight, maxBottomRight, maxBottomLeft)
 			local newKey = GetCacheKey(width, height, newParams)
 
@@ -443,6 +446,10 @@ const function NewStatic(width: number, height: number, params: RedrawParams): S
 end
 
 const function New(params: CreateParams): Supercorner
+	local params = table.clone(params)
+	params.CornerRadius = params.CornerRadius or 0
+	params.CornerSmoothing = params.CornerSmoothing or 1
+
 	local defaultRadius = params.CornerRadius
 	local topLeft = params.TopLeftRadius or defaultRadius
 	local topRight = params.TopRightRadius or defaultRadius
