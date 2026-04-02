@@ -3,10 +3,12 @@
 
 local React = require(script.Parent.Parent.Parent._Index["jsdotlua_react@17.2.1"].react)
 local Supercorner =
-    require(script.Parent.Parent.Parent._Index["cameronpcampbell_supercorner@0.0.4"].supercorner)
+    require(script.Parent.Parent.Parent._Index["cameronpcampbell_supercorner@0.0.6"].supercorner)
 local T = require(script.Parent.Parent.Parent._Index["cameronpcampbell_typeforge@3.0.3"].typeforge)
 
 local CreateElement = React.createElement
+
+const CREATE_ONLY_PROPS = {"MaxCornerRadius", "MaxTopLeftRadius", "MaxTopRightRadius", "MaxBottomRightRadius", "MaxBottomLeftRadius", "Redrawable"}
 
 const UICORNER_HAS_INDIVIDUAL_RADII = (function()
     local reflectionService = game:GetService("ReflectionService")
@@ -26,6 +28,19 @@ local function Extract<T, V>(tble: T, propName: V & keyof<T>): (index<T, V>, T.O
     return value, tble
 end
 
+local function RemoveNils(tble: { any }): { any }
+    local idx = 1
+    while idx <= #tble do
+        if tble[idx] == nil then
+            tble[idx] = tble[#tble]
+            tble[#tble] = nil
+        else
+            idx += 1
+        end
+    end
+    return tble
+end
+
 local function Merge<TA, TB>(tbleA: TA, tbleB: TB): T.Flatten<TB & TA>
     for key, value in tbleB :: { [any]: any } do
         (tbleA :: { [any]: any })[key] = value
@@ -42,6 +57,7 @@ local function RenderSupercorner(
     }>,
     supercorner: Supercorner.Supercorner
 )
+    local props = table.clone(props)
     local _, props = Extract(props, "CornerRadius")
     local _, props = Extract(props, "CornerSmoothing")
     local _, props = Extract(props, "TopLeftRadius")
@@ -78,6 +94,7 @@ local function RenderFallback(
         [any]: any
     }>
 )
+    local props = table.clone(props)
     local cornerRadius, props = Extract(props, "CornerRadius")
     local _, props = Extract(props, "CornerSmoothing")
     local topLeftRadius, props = Extract(props, "TopLeftRadius")
@@ -116,6 +133,81 @@ local function RenderFallback(
             })
 end
 
+local function WarnOnCreateOnlyPropChange(props: { [any]: any })
+    local createOnlyRef = React.useRef({
+        MaxCornerRadius = props.MaxCornerRadius,
+        MaxTopLeftRadius = props.MaxTopLeftRadius,
+        MaxTopRightRadius = props.MaxTopRightRadius,
+        MaxBottomRightRadius = props.MaxBottomRightRadius,
+        MaxBottomLeftRadius = props.MaxBottomLeftRadius,
+        Redrawable = props.Redrawable,
+    })
+
+    local prevProps = createOnlyRef.current
+
+    for propName in CREATE_ONLY_PROPS do
+        if props[propName] == prevProps[propName] then continue end
+
+        warn(`[Supercorner React] '{propName}' cannot be updated after mount.`)
+    end
+
+    createOnlyRef.current = {
+        MaxCornerRadius = props.MaxCornerRadius,
+        MaxTopLeftRadius = props.MaxTopLeftRadius,
+        MaxTopRightRadius = props.MaxTopRightRadius,
+        MaxBottomRightRadius = props.MaxBottomRightRadius,
+        MaxBottomLeftRadius = props.MaxBottomLeftRadius,
+        Redrawable = props.Redrawable,
+    }
+end
+
+local function Redraw(
+    props: { [any]: any },
+    supercorner: Supercorner.Supercorner?,
+    setRedrawVersion: (updater: (v: number) -> number) -> ()
+)
+    local hasMounted = React.useRef(false)
+
+    local redrawParams = React.useRef(nil :: Supercorner.RedrawParams?)
+    redrawParams.current = {
+        CornerRadius = props.CornerRadius,
+        CornerSmoothing = props.CornerSmoothing,
+        TopLeftRadius = props.TopLeftRadius,
+        TopRightRadius = props.TopRightRadius,
+        BottomRightRadius = props.BottomRightRadius,
+        BottomLeftRadius = props.BottomLeftRadius,
+        PreserveSmoothing = props.PreserveSmoothing,
+        AntiAlias = props.AntiAlias,
+    }
+
+    React.useEffect(function()
+        if not hasMounted.current then
+            hasMounted.current = true
+            return
+        end
+
+        if not supercorner then return end
+
+        local ok, err = (pcall :: any)(supercorner.Redraw, supercorner, redrawParams.current)
+
+        if not ok then
+            warn(`[Supercorner React] Failed to redraw Supercorner. Make sure the component was created with \`Redrawable = true\`. Error: {err}`)
+            return
+        end
+
+        setRedrawVersion(function(v: number) return v + 1 end)
+    end, RemoveNils({
+        props.CornerRadius,
+        props.CornerSmoothing,
+        props.TopLeftRadius,
+        props.TopRightRadius,
+        props.BottomRightRadius,
+        props.BottomLeftRadius,
+        props.PreserveSmoothing,
+        props.AntiAlias,
+    }) :: any)
+end
+
 return function(props: T.Flatten<Supercorner.CreateParams & {
     BackgroundColor3: Color3?,
     BackgroundTransparency: number?,
@@ -123,7 +215,7 @@ return function(props: T.Flatten<Supercorner.CreateParams & {
 }>)
     local supercorner: Supercorner.Supercorner? = React.useState(function()
         local _ok, supercorner = pcall(Supercorner.new, {
-            CornerRadius = props.CornerRadius or 0,
+            CornerRadius = props.CornerRadius,
             CornerSmoothing = props.CornerSmoothing,
             TopLeftRadius = props.TopLeftRadius,
             TopRightRadius = props.TopRightRadius,
@@ -153,6 +245,11 @@ return function(props: T.Flatten<Supercorner.CreateParams & {
             end
         end
     end, {})
+
+    local _redrawVersion, setRedrawVersion = React.useState(0)
+
+    WarnOnCreateOnlyPropChange(props)
+    Redraw(props, supercorner, setRedrawVersion)
 
     return
         if supercorner then RenderSupercorner(props, supercorner)

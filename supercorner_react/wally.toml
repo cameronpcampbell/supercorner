@@ -1,7 +1,7 @@
 [package]
 name = "cameronpcampbell/supercorner-react"
 description = "React wrapper for Supercorner (A figma-inspired alternative to Roblox's UICorner)."
-version = "0.0.3"
+version = "0.0.4"
 registry = "https://github.com/UpliftGames/wally-index"
 realm = "shared"
 license = "MIT"
@@ -10,7 +10,7 @@ exclude=[ "**", "**/*.test.luau", "**/*.bench.luau" ]
 include=[ "src", "src/**", "default.project.json", "wally.toml", "wally.lock", "LICENSE.md", "README.md" ]
 
 [dependencies]
-supercorner = "cameronpcampbell/supercorner@0.0.4"
+supercorner = "cameronpcampbell/supercorner@0.0.6"
 react = "jsdotlua/react@17.2.1"
 react-roblox = "jsdotlua/react-roblox@17.2.1"
 typeforge = "cameronpcampbell/typeforge@3.0.3"

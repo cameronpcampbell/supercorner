@@ -9,16 +9,36 @@ local Players = game:GetService("Players")
 local CreateElement = React.createElement
 
 local function App()
+	local cornerRadius, setCornerRadius = React.useState(75)
+	local cornerSmoothing, setCornerSmoothing = React.useState(1)
+
+	React.useEffect(function()
+		local running = true
+
+		task.spawn(function()
+			while running and (cornerRadius > 0 or cornerSmoothing > 0) do
+				task.wait(0.05)
+				if not running then break end
+				setCornerRadius(function(v: number) return math.max(v - 1, 0) end)
+				setCornerSmoothing(function(v: number) return math.max(v - 1/35, 0) end)
+			end
+		end)
+
+		return function()
+			running = false
+		end
+	end, {})
+
 	return CreateElement("ScreenGui", {}, {
 		MySupercorner = CreateElement(Supercorner :: any, {
-		    CornerRadius = 20,
-			BottomLeftRadius = 50,
-			CornerSmoothing = 1.,
+			CornerRadius = cornerRadius,
+			CornerSmoothing = cornerSmoothing,
+			Redrawable = true,
 			Size = UDim2.fromScale(.8, .8),
-            Position = UDim2.fromScale(.5, .5),
-            AnchorPoint = Vector2.new(.5, .5),
-            BackgroundColor3 = BrickColor.Yellow().Color,
-            BackgroundTransparency = .5
+			Position = UDim2.fromScale(.5, .5),
+			AnchorPoint = Vector2.new(.5, .5),
+			BackgroundColor3 = BrickColor.Yellow().Color,
+			BackgroundTransparency = .5,
 		}),
 	})
 end
