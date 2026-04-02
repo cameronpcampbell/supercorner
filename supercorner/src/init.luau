@@ -3,7 +3,9 @@
 
 const FigmaSquircle = require("@self/figma_squircle_luau")
 const Flatten = require("@self/flatten")
-const Rasterize = require("@self/rasterize")
+const RasterizeModule = require("@self/rasterize")
+const Rasterize = RasterizeModule.rasterize
+const fillInterior = RasterizeModule.fillInterior
 
 const AssetService = game:GetService("AssetService")
 
@@ -125,7 +127,7 @@ const function Render(state: SupercornerState, params: RedrawParams)
 	const tolerance = if antiAlias then 1/8 else 1/4
 	const vertices, vertexCount = Flatten(ops, tolerance)
 
-	buffer.fill(state.PixelBuf, 0, 0)
+	fillInterior(state.PixelBuf, 0, width * height, 0x00FFFFFF)
 
 	Rasterize(
 		state.PixelBuf,

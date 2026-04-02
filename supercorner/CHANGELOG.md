@@ -1,3 +1,6 @@
+# v0.0.6
+- Transparent pixels now have white RGB values instead of black which prevents artifacting around the edges of supercorner instances.
+
 # v0.0.5
 - `CornerRadius` and `CornerSmoothing` are now optional, defaulting to `0` and `1` respectively.
 

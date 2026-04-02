@@ -363,4 +363,7 @@ const function rasterize(
     end
 end
 
-return rasterize
+return {
+	rasterize = rasterize,
+	fillInterior = fillInterior,
+}
