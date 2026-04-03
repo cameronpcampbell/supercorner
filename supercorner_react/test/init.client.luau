@@ -17,10 +17,10 @@ local function App()
 
 		task.spawn(function()
 			while running and (cornerRadius > 0 or cornerSmoothing > 0) do
-				task.wait(0.05)
+				task.wait(0.1)
 				if not running then break end
-				setCornerRadius(function(v: number) return math.max(v - 1, 0) end)
-				setCornerSmoothing(function(v: number) return math.max(v - 1/35, 0) end)
+				setCornerRadius(function(v: number) return math.max(v - 2, 0) end)
+				setCornerSmoothing(function(v: number) return math.max(v - 2/35, 0) end)
 			end
 		end)
 
@@ -39,6 +39,16 @@ local function App()
 			AnchorPoint = Vector2.new(.5, .5),
 			BackgroundColor3 = BrickColor.Yellow().Color,
 			BackgroundTransparency = .5,
+			StrokeThickness = 5,
+			StrokeGradient = CreateElement("UIGradient", {
+				Color = ColorSequence.new(Color3.new(1, 0, 0), Color3.new(0, 0, 1)),
+			}),
+		}, {
+            CreateElement("Frame", {
+                Size = UDim2.fromScale(1, 1),
+                Transparency = .5,
+
+            })
 		}),
 	})
 end

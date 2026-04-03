@@ -1,3 +1,6 @@
+# v0.0.5
+- Added support for strokes.
+
 # v0.0.4
 - Added automatic redraw when redrawable props change (`CornerRadius`, `CornerSmoothing`, `TopLeftRadius`, `TopRightRadius`, `BottomRightRadius`, `BottomLeftRadius`, `PreserveSmoothing`, `AntiAlias`).
 - Added warnings when create-only props are changed after mount (`MaxCornerRadius`, `MaxTopLeftRadius`, `MaxTopRightRadius`, `MaxBottomRightRadius`, `MaxBottomLeftRadius`, `Redrawable`).
