@@ -3,9 +3,7 @@
 
 const FigmaSquircle = require("@self/figma_squircle_luau")
 const Flatten = require("@self/flatten")
-const RasterizeModule = require("@self/rasterize")
-const Rasterize = RasterizeModule.rasterize
-const fillInterior = RasterizeModule.fillInterior
+const Rasterize = require("@self/rasterize").rasterize
 
 const AssetService = game:GetService("AssetService")
 
@@ -80,6 +78,8 @@ end)()
 
 const Cache: { [string]: CacheEntry } = {}
 const StaticCache: { [string]: StaticCacheEntry } = {}
+local cacheCount = 0
+local staticCacheCount = 0
 const CacheKeyBuf = buffer.create(74)
 
 const function GetCacheKey(width: number, height: number, params: RedrawParams): string
@@ -186,8 +186,6 @@ const function Render(state: SupercornerState, params: RedrawParams)
 		subPathCount = 2
 	end
 
-	fillInterior(state.PixelBuf, 0, width * height, 0x00FFFFFF)
-
 	Rasterize(
 		state.PixelBuf,
 		finalVertices,
@@ -286,12 +284,12 @@ const function CalcSliceCenter(width: number, height: number, params: RedrawPara
 	local bottomRightExtension = math.max((params.BottomRightRadius or defaultRadius) * factor, strokeExtension)
 	local bottomLeftExtension = math.max((params.BottomLeftRadius or defaultRadius) * factor, strokeExtension)
 
-	return Rect.new(
-		math.max(topLeftExtension, bottomLeftExtension),
-		math.max(topLeftExtension, topRightExtension),
-		width - math.max(topRightExtension, bottomRightExtension),
-		height - math.max(bottomRightExtension, bottomLeftExtension)
-	)
+	local left = math.max(topLeftExtension, bottomLeftExtension)
+	local top = math.max(topLeftExtension, topRightExtension)
+	local right = math.max(topRightExtension, bottomRightExtension)
+	local bottom = math.max(bottomRightExtension, bottomLeftExtension)
+
+	return Rect.new(left, top, width - right, height - bottom)
 end
 
 -- The max extension factor is 2 (smoothing at its peak), so each corner
@@ -338,6 +336,7 @@ const function NewRedrawable(
 		}
 
 		Cache[cacheKey] = entry
+		cacheCount += 1
 	end
 
 	local state: SupercornerState = (entry :: CacheEntry).state
@@ -349,9 +348,6 @@ const function NewRedrawable(
 	return {
 		Redraw = function(self: Supercorner, newParams: RedrawParams)
 			if destroyed then return end
-
-			newParams.CornerRadius = newParams.CornerRadius or 0
-			newParams.CornerSmoothing = newParams.CornerSmoothing or 1
 
 			newParams = ClampToMaxRadii(newParams, maxTopLeft, maxTopRight, maxBottomRight, maxBottomLeft)
 			local newKey = GetCacheKey(width, height, newParams)
@@ -371,6 +367,7 @@ const function NewRedrawable(
 
 					if entry.refCount == 0 then
 						Cache[entry.key] = nil
+						cacheCount -= 1
 					end
 				end
 
@@ -391,6 +388,7 @@ const function NewRedrawable(
 
 				if entry.refCount == 0 then
 					Cache[entry.key] = nil
+					cacheCount -= 1
 
 				else
 					state = {
@@ -405,6 +403,7 @@ const function NewRedrawable(
 			Render(state, newParams)
 			entry = { state = state, refCount = 1, key = newKey }
 			Cache[newKey] = entry
+			cacheCount += 1
 		end,
 
 		GetContent = function(self: Supercorner): Content
@@ -428,6 +427,7 @@ const function NewRedrawable(
 
 				if entry.refCount == 0 then
 					Cache[entry.key] = nil
+					cacheCount -= 1
 					state.EImage:Destroy()
 				end
 
@@ -471,6 +471,7 @@ const function NewStatic(width: number, height: number, params: RedrawParams): S
 		}
 
 		StaticCache[cacheKey] = staticEntry :: StaticCacheEntry
+		staticCacheCount += 1
 	end
 
 	local sliceCenter = CalcSliceCenter(width, height, params)
@@ -507,16 +508,13 @@ const function NewStatic(width: number, height: number, params: RedrawParams): S
 
 			if staticEntry.refCount == 0 then
 				StaticCache[staticEntry.key] = nil
+				staticCacheCount -= 1
 			end
 		end,
 	}
 end
 
 const function New(params: CreateParams): Supercorner
-	local params = table.clone(params)
-	params.CornerRadius = params.CornerRadius or 0
-	params.CornerSmoothing = params.CornerSmoothing or 1
-
 	local defaultRadius: number = params.CornerRadius or 0
 	local topLeft: number = params.TopLeftRadius or defaultRadius
 	local topRight: number = params.TopRightRadius or defaultRadius
@@ -542,23 +540,11 @@ const function New(params: CreateParams): Supercorner
 end
 
 local function GetCacheSize(): number
-	local count = 0
-
-	for _ in Cache do
-		count += 1
-	end
-
-	return count
+	return cacheCount
 end
 
 local function GetStaticCacheSize(): number
-	local count = 0
-
-	for _ in StaticCache do
-		count += 1
-	end
-
-	return count
+	return staticCacheCount
 end
 
 return {

@@ -22,21 +22,9 @@ local function distribute_and_normalize(
 	local r = { top_left_radius, top_right_radius, bottom_right_radius, bottom_left_radius }
 	local b = { -1.0, -1.0, -1.0, -1.0 }
 
-	-- Sort indices by radius descending (insertion sort, 4 elements)
+	-- Sort indices by radius descending
 	local order = { 1, 2, 3, 4 }
-
-	for i = 2, 4 do
-		local key = order[i]
-		local key_r = r[key]
-		local j = i - 1
-
-		while j >= 1 and r[order[j]] < key_r do
-			order[j + 1] = order[j]
-			j -= 1
-		end
-
-		order[j + 1] = key
-	end
+	table.sort(order, function(a, b) return r[a] > r[b] end)
 
 	for _, ci in order do
 		local radius = r[ci]

@@ -6,7 +6,7 @@ const Players = game:GetService("Players")
 
 const Supercorner = require(RepStorage.supercorner)
 
-const STROKE_RADIUS = 5
+const STROKE_RADIUS = 0
 const SIZE = 200
 const SLIDER_HEIGHT = 40
 const GAP = 80

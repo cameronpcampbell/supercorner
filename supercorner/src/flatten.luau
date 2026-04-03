@@ -7,12 +7,36 @@ type SvgOp = squircleTypes.SvgOp
 const VERTEX_STRIDE = 8
 const INITIAL_CAPACITY = 128
 
+-- Module-level scratch buffer for De Casteljau subdivision stack, reused across calls.
+const MAX_DEPTH = 16
+const STACK_STRIDE = 36
+const stackBuf = buffer.create(MAX_DEPTH * 2 * STACK_STRIDE)
+
 const function createVertexBuf(capacity: number): buffer
 	return buffer.create(capacity * VERTEX_STRIDE)
 end
 
 const function flatten(ops: { SvgOp }, tolerance: number): (buffer, number)
-	local capacity = INITIAL_CAPACITY
+	-- Estimate vertex count from op types to avoid dynamic resizing.
+	-- Conservative upper bounds: cubics subdivide to at most 2^MAX_DEPTH segments,
+	-- but typical squircle cubics produce ~8-16 vertices; arcs produce ~4-12.
+	local estimate = 0
+
+	for _, op in ops do
+		const t = op.type
+
+		if t == "c" then
+			estimate += 16
+
+		elseif t == "a" then
+			estimate += 12
+
+		else
+			estimate += 1
+		end
+	end
+
+	local capacity = math.max(INITIAL_CAPACITY, estimate)
 	local buf = createVertexBuf(capacity)
 	local count = 0
 
@@ -38,12 +62,6 @@ const function flatten(ops: { SvgOp }, tolerance: number): (buffer, number)
 	end
 
 	const tolSq = tolerance * tolerance
-	const MAX_DEPTH = 16
-
-	-- Iterative De Casteljau subdivision using an explicit buffer stack.
-	-- Stack entry: x0 y0 x1 y1 x2 y2 x3 y3 depth (9 × f32 = 36 bytes)
-	const STACK_STRIDE = 36
-	const stackBuf = buffer.create(MAX_DEPTH * 2 * STACK_STRIDE)
 
 	const function flattenCubic(
 		sx0: number, sy0: number,
@@ -172,8 +190,9 @@ const function flatten(ops: { SvgOp }, tolerance: number): (buffer, number)
 			return
 		end
 
-		const cosPhi = math.cos(math.rad(rotation))
-		const sinPhi = math.sin(math.rad(rotation))
+		const rotRad = math.rad(rotation)
+		const cosPhi = math.cos(rotRad)
+		const sinPhi = math.sin(rotRad)
 
 		const hdx = (x1 - x2) * 0.5
 		const hdy = (y1 - y2) * 0.5

@@ -1,3 +1,14 @@
+# v0.0.8
+- Rasterizer now clears only the shape's bounding-box rows instead of the full pixel buffer.
+- AA scanline loop skips solid interior pixels by scanning forward to the next edge boundary, filling the gap in a single call.
+- Reused module-level scratch buffers for edge, area, fill, and subdivision stack data to reduce per-render allocations and GC pressure.
+- Vertex buffer is now pre-sized from op types to avoid dynamic resizing during path flattening.
+- Replaced insertion sorts with `table.sort` in edge sorting and corner radius distribution.
+- Cached repeated `math.rad()` calls in path generation and arc flattening.
+- Removed unnecessary `table.clone()` and redundant parameter defaulting in the public API.
+- Cache size queries are now O(1) via maintained counters instead of full table iteration.
+- Cached intermediate `math.max` results in slice center calculation.
+
 # v0.0.7
 - Added stroke support. Pass `Stroke = <thickness>` to render an inset outline instead of a fill. If the stroke is thick enough to cover the entire shape, a fill is used instead.
 - Rasterizer now supports multiple sub-paths, enabling composite polygon rendering (used internally for stroke).

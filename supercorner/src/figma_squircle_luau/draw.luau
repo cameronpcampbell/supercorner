@@ -31,13 +31,15 @@ const function get_path_params_for_corner(
 	end
 
 	const arc_measure = 90.0 * (1.0 - smoothing)
-	const arc_section_length = math.sin(math.rad(arc_measure / 2.0)) * corner_radius * math.sqrt(2)
+	const arcMeasureHalfRad = math.rad(arc_measure / 2.0)
+	const arc_section_length = math.sin(arcMeasureHalfRad) * corner_radius * math.sqrt(2)
 
 	const angle_alpha = (90.0 - arc_measure) / 2.0
-	const p3_to_p4_distance = corner_radius * math.tan(math.rad(angle_alpha / 2.0))
-	const angle_beta = 45.0 * smoothing
-	const c = p3_to_p4_distance * math.cos(math.rad(angle_beta))
-	const d = c * math.tan(math.rad(angle_beta))
+	const angleAlphaHalfRad = math.rad(angle_alpha / 2.0)
+	const p3_to_p4_distance = corner_radius * math.tan(angleAlphaHalfRad)
+	const angleBetaRad = math.rad(45.0 * smoothing)
+	const c = p3_to_p4_distance * math.cos(angleBetaRad)
+	const d = c * math.tan(angleBetaRad)
 
 	local b = (p - arc_section_length - c - d) / 3.0
 	local a = 2.0 * b
