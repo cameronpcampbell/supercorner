@@ -24,6 +24,7 @@ export type CreateParams = {
 	PreserveSmoothing: boolean?,
 	AntiAlias: boolean?,
 	Redrawable: boolean?,
+	Stroke: number?,
 }
 
 export type RedrawParams = {
@@ -34,7 +35,8 @@ export type RedrawParams = {
 	BottomRightRadius: number?,
 	BottomLeftRadius: number?,
 	PreserveSmoothing: boolean?,
-	AntiAlias: boolean?
+	AntiAlias: boolean?,
+	Stroke: number?,
 }
 
 export type Supercorner = {
@@ -78,21 +80,26 @@ end)()
 
 const Cache: { [string]: CacheEntry } = {}
 const StaticCache: { [string]: StaticCacheEntry } = {}
-const CacheKeyBuf = buffer.create(66)
+const CacheKeyBuf = buffer.create(74)
 
 const function GetCacheKey(width: number, height: number, params: RedrawParams): string
 	buffer.writef64(CacheKeyBuf, 0, width)
 	buffer.writef64(CacheKeyBuf, 8, height)
-	buffer.writef64(CacheKeyBuf, 16, params.CornerRadius)
-	buffer.writef64(CacheKeyBuf, 24, params.CornerSmoothing)
+	buffer.writef64(CacheKeyBuf, 16, params.CornerRadius or 0)
+	buffer.writef64(CacheKeyBuf, 24, params.CornerSmoothing or 1)
 	buffer.writef64(CacheKeyBuf, 32, if params.TopLeftRadius ~= nil then params.TopLeftRadius else -1)
 	buffer.writef64(CacheKeyBuf, 40, if params.TopRightRadius ~= nil then params.TopRightRadius else -1)
 	buffer.writef64(CacheKeyBuf, 48, if params.BottomRightRadius ~= nil then params.BottomRightRadius else -1)
 	buffer.writef64(CacheKeyBuf, 56, if params.BottomLeftRadius ~= nil then params.BottomLeftRadius else -1)
 	buffer.writeu8(CacheKeyBuf, 64, if params.PreserveSmoothing then 1 else 0)
 	buffer.writeu8(CacheKeyBuf, 65, if params.AntiAlias == false then 0 else 1)
+	buffer.writef64(CacheKeyBuf, 66, if params.Stroke ~= nil then params.Stroke else -1)
 	return buffer.tostring(CacheKeyBuf)
 end
+
+const VERTEX_STRIDE = 8
+const SingleSubPath = buffer.create(4)
+buffer.writeu32(SingleSubPath, 0, 0)
 
 -- All geometry is rendered at 2x scale for HiDPI. Params use logical pixels;
 -- the render function doubles radii to match the internal coordinate space.
@@ -100,39 +107,93 @@ const function Render(state: SupercornerState, params: RedrawParams)
 	const width, height = state.Width, state.Height
 
 	-- Smoothing of exactly 1 produces degenerate corners; clamp just below.
-	local clampedSmoothing = math.min(params.CornerSmoothing, 1 - 1e-6)
+	local clampedSmoothing = math.min(params.CornerSmoothing or 1, 1 - 1e-6)
 
 	local topLeftRadius, topRightRadius =
 	    params.TopLeftRadius, params.TopRightRadius
 	local bottomRightRadius, bottomLeftRadius =
 		params.BottomRightRadius, params.BottomLeftRadius
 
-	const ops = FigmaSquircle.get_svg_path({
+	const defaultRadius2x = (params.CornerRadius or 0) * 2
+	const tl2x = if topLeftRadius then topLeftRadius * 2 else nil
+	const tr2x = if topRightRadius then topRightRadius * 2 else nil
+	const br2x = if bottomRightRadius then bottomRightRadius * 2 else nil
+	const bl2x = if bottomLeftRadius then bottomLeftRadius * 2 else nil
+
+	const outerOps = FigmaSquircle.get_svg_path({
 		width = width,
 		height = height,
-		cornerRadius = params.CornerRadius * 2,
+		cornerRadius = defaultRadius2x,
 		cornerSmoothing = clampedSmoothing,
-		topLeftCornerRadius =
-		    if topLeftRadius then topLeftRadius * 2 else nil,
-		topRightCornerRadius =
-		    if topRightRadius then topRightRadius * 2 else nil,
-		bottomRightCornerRadius =
-		    if bottomRightRadius then bottomRightRadius * 2 else nil,
-		bottomLeftCornerRadius =
-		    if bottomLeftRadius then bottomLeftRadius * 2 else nil,
+		topLeftCornerRadius = tl2x,
+		topRightCornerRadius = tr2x,
+		bottomRightCornerRadius = br2x,
+		bottomLeftCornerRadius = bl2x,
 		preserveSmoothing = params.PreserveSmoothing,
 	})
 
 	const antiAlias = if params.AntiAlias ~= nil then params.AntiAlias else true
 	const tolerance = if antiAlias then 1/8 else 1/4
-	const vertices, vertexCount = Flatten(ops, tolerance)
+	const outerVertices, outerVertexCount = Flatten(outerOps, tolerance)
+
+	local finalVertices = outerVertices
+	local finalVertexCount = outerVertexCount
+	local subPathStarts = SingleSubPath
+	local subPathCount = 1
+
+	local stroke = params.Stroke
+	local strokePx = if stroke and stroke > 0 then stroke * 2 else 0
+	local innerW = width - 2 * strokePx
+	local innerH = height - 2 * strokePx
+
+	if strokePx > 0 and innerW > 0 and innerH > 0 then
+		const innerDefaultRadius = math.max(0, defaultRadius2x - strokePx)
+		const innerOps = FigmaSquircle.get_svg_path({
+			width = innerW,
+			height = innerH,
+			cornerRadius = innerDefaultRadius,
+			cornerSmoothing = clampedSmoothing,
+			topLeftCornerRadius =
+				if tl2x then math.max(0, tl2x - strokePx) else nil,
+			topRightCornerRadius =
+				if tr2x then math.max(0, tr2x - strokePx) else nil,
+			bottomRightCornerRadius =
+				if br2x then math.max(0, br2x - strokePx) else nil,
+			bottomLeftCornerRadius =
+				if bl2x then math.max(0, bl2x - strokePx) else nil,
+			preserveSmoothing = params.PreserveSmoothing,
+		})
+
+		const innerVertices, innerVertexCount = Flatten(innerOps, tolerance)
+
+		-- Build combined vertex buffer: outer + reversed/offset inner
+		local totalCount = outerVertexCount + innerVertexCount
+		local combined = buffer.create(totalCount * VERTEX_STRIDE)
+		buffer.copy(combined, 0, outerVertices, 0, outerVertexCount * VERTEX_STRIDE)
+
+		for idx = 0, innerVertexCount - 1 do
+			const srcIdx = (innerVertexCount - 1 - idx) * VERTEX_STRIDE
+			const dstIdx = (outerVertexCount + idx) * VERTEX_STRIDE
+			buffer.writef32(combined, dstIdx, buffer.readf32(innerVertices, srcIdx) + strokePx)
+			buffer.writef32(combined, dstIdx + 4, buffer.readf32(innerVertices, srcIdx + 4) + strokePx)
+		end
+
+		finalVertices = combined
+		finalVertexCount = totalCount
+		subPathStarts = buffer.create(8)
+		buffer.writeu32(subPathStarts, 0, 0)
+		buffer.writeu32(subPathStarts, 4, outerVertexCount)
+		subPathCount = 2
+	end
 
 	fillInterior(state.PixelBuf, 0, width * height, 0x00FFFFFF)
 
 	Rasterize(
 		state.PixelBuf,
-		vertices,
-		vertexCount,
+		finalVertices,
+		finalVertexCount,
+		subPathStarts,
+		subPathCount,
 		width,
 		height,
 		1, 1, 1, 1,
@@ -159,7 +220,7 @@ const function ClampToMaxRadii(
 	maxBottomRight: number,
 	maxBottomLeft: number
 ): RedrawParams
-	local defaultRadius = params.CornerRadius
+	local defaultRadius = params.CornerRadius or 0
 	local topLeft = params.TopLeftRadius or defaultRadius
 	local topRight = params.TopRightRadius or defaultRadius
 	local bottomRight = params.BottomRightRadius or defaultRadius
@@ -204,6 +265,7 @@ const function ClampToMaxRadii(
 		BottomLeftRadius = bottomLeft,
 		PreserveSmoothing = params.PreserveSmoothing,
 		AntiAlias = params.AntiAlias,
+		Stroke = params.Stroke,
 	}
 end
 
@@ -211,15 +273,18 @@ end
 -- The factor is doubled here because the image is in 2x internal pixel space.
 -- Slice boundaries sit at the max extension of corners sharing an edge,
 -- so that no corner is cut by the 9-slice.
+-- For strokes, the slice must also contain the stroke's inner edge so that
+-- the stretchable edge/center slices only contain uniform geometry.
 const function CalcSliceCenter(width: number, height: number, params: RedrawParams): Rect
-	local smoothing = math.min(params.CornerSmoothing, 1 - 1e-6)
-	local defaultRadius = params.CornerRadius
+	local smoothing = math.min(params.CornerSmoothing or 1, 1 - 1e-6)
+	local defaultRadius = params.CornerRadius or 0
 	local factor = (1 + smoothing) * 2
+	local strokeExtension = if params.Stroke then params.Stroke * 2 else 0
 
-	local topLeftExtension = (params.TopLeftRadius or defaultRadius) * factor
-	local topRightExtension = (params.TopRightRadius or defaultRadius) * factor
-	local bottomRightExtension = (params.BottomRightRadius or defaultRadius) * factor
-	local bottomLeftExtension = (params.BottomLeftRadius or defaultRadius) * factor
+	local topLeftExtension = math.max((params.TopLeftRadius or defaultRadius) * factor, strokeExtension)
+	local topRightExtension = math.max((params.TopRightRadius or defaultRadius) * factor, strokeExtension)
+	local bottomRightExtension = math.max((params.BottomRightRadius or defaultRadius) * factor, strokeExtension)
+	local bottomLeftExtension = math.max((params.BottomLeftRadius or defaultRadius) * factor, strokeExtension)
 
 	return Rect.new(
 		math.max(topLeftExtension, bottomLeftExtension),
@@ -452,18 +517,18 @@ const function New(params: CreateParams): Supercorner
 	params.CornerRadius = params.CornerRadius or 0
 	params.CornerSmoothing = params.CornerSmoothing or 1
 
-	local defaultRadius = params.CornerRadius
-	local topLeft = params.TopLeftRadius or defaultRadius
-	local topRight = params.TopRightRadius or defaultRadius
-	local bottomRight = params.BottomRightRadius or defaultRadius
-	local bottomLeft = params.BottomLeftRadius or defaultRadius
+	local defaultRadius: number = params.CornerRadius or 0
+	local topLeft: number = params.TopLeftRadius or defaultRadius
+	local topRight: number = params.TopRightRadius or defaultRadius
+	local bottomRight: number = params.BottomRightRadius or defaultRadius
+	local bottomLeft: number = params.BottomLeftRadius or defaultRadius
 
 	if params.Redrawable or not CAN_CREATE_STATIC_CONTENT then
-		local maxDefault = params.MaxCornerRadius or defaultRadius
-		local maxTopLeft = params.MaxTopLeftRadius or math.max(maxDefault, topLeft)
-		local maxTopRight = params.MaxTopRightRadius or math.max(maxDefault, topRight)
-		local maxBottomRight = params.MaxBottomRightRadius or math.max(maxDefault, bottomRight)
-		local maxBottomLeft = params.MaxBottomLeftRadius or math.max(maxDefault, bottomLeft)
+		local maxDefault: number = params.MaxCornerRadius or defaultRadius
+		local maxTopLeft: number = params.MaxTopLeftRadius or math.max(maxDefault, topLeft)
+		local maxTopRight: number = params.MaxTopRightRadius or math.max(maxDefault, topRight)
+		local maxBottomRight: number = params.MaxBottomRightRadius or math.max(maxDefault, bottomRight)
+		local maxBottomLeft: number = params.MaxBottomLeftRadius or math.max(maxDefault, bottomLeft)
 
 		local width, height = CalcSize(maxTopLeft, maxTopRight, maxBottomRight, maxBottomLeft)
 		local clampedParams = ClampToMaxRadii(params, maxTopLeft, maxTopRight, maxBottomRight, maxBottomLeft)

@@ -12,7 +12,7 @@
         "StarterPlayer": {
             "StarterPlayerScripts": {
                 "test": {
-                    "$path": "test_cache.client.luau"
+                    "$path": "test.client.luau"
                 }
             }
         }

@@ -5,6 +5,8 @@
 -- [0] yMin  [4] yMax  [8] xAtYmin  [12] dxPerDy  [16] dir (+1/-1)
 const EDGE_STRIDE = 20
 
+-- Vertex buffer layout (f32 fields at byte offsets)
+-- [0] x  [4] y
 const VERTEX_STRIDE = 8
 
 -- Fills a span of pixels with a u32 color by writing one pixel then exponentially
@@ -161,6 +163,8 @@ const function rasterize(
     pixelBuf: buffer,
     vertices: buffer,
     vertexCount: number,
+    subPathStarts: buffer,
+    subPathCount: number,
     width: number,
     height: number,
     r: number,
@@ -169,49 +173,56 @@ const function rasterize(
     a: number,
     antiAlias: boolean
 )
-    -- Build edge table from polygon vertices
+    -- Build edge table from polygon vertices, closing each sub-path independently
     local edgeBuf = buffer.create(vertexCount * EDGE_STRIDE)
     local edgeCount = 0
     local shapeYMin = math.huge
     local shapeYMax = -math.huge
 
-    for i = 0, vertexCount - 1 do
-        const j = if i < vertexCount - 1 then i + 1 else 0
+    for s = 0, subPathCount - 1 do
+        const startIdx = buffer.readu32(subPathStarts, s * 4)
+        const endIdx = if s < subPathCount - 1
+            then buffer.readu32(subPathStarts, (s + 1) * 4)
+            else vertexCount
 
-        const iOff = i * VERTEX_STRIDE
-        const x0 = buffer.readf32(vertices, iOff)
-        const y0 = buffer.readf32(vertices, iOff + 4)
-        const jOff = j * VERTEX_STRIDE
-        const x1 = buffer.readf32(vertices, jOff)
-        const y1 = buffer.readf32(vertices, jOff + 4)
+        for i = startIdx, endIdx - 1 do
+            const j = if i < endIdx - 1 then i + 1 else startIdx
 
-        if y0 == y1 then
-            continue
+            const iOff = i * VERTEX_STRIDE
+            const x0 = buffer.readf32(vertices, iOff)
+            const y0 = buffer.readf32(vertices, iOff + 4)
+            const jOff = j * VERTEX_STRIDE
+            const x1 = buffer.readf32(vertices, jOff)
+            const y1 = buffer.readf32(vertices, jOff + 4)
+
+            if y0 == y1 then
+                continue
+            end
+
+            const offset = edgeCount * EDGE_STRIDE
+
+            -- Orient edges so yMin < yMax; dir tracks original winding direction
+            if y0 < y1 then
+                buffer.writef32(edgeBuf, offset, y0)
+                buffer.writef32(edgeBuf, offset + 4, y1)
+                buffer.writef32(edgeBuf, offset + 8, x0)
+                buffer.writef32(edgeBuf, offset + 12, (x1 - x0) / (y1 - y0))
+                buffer.writef32(edgeBuf, offset + 16, 1)
+                if y0 < shapeYMin then shapeYMin = y0 end
+                if y1 > shapeYMax then shapeYMax = y1 end
+
+            else
+                buffer.writef32(edgeBuf, offset, y1)
+                buffer.writef32(edgeBuf, offset + 4, y0)
+                buffer.writef32(edgeBuf, offset + 8, x1)
+                buffer.writef32(edgeBuf, offset + 12, (x0 - x1) / (y0 - y1))
+                buffer.writef32(edgeBuf, offset + 16, -1)
+                if y1 < shapeYMin then shapeYMin = y1 end
+                if y0 > shapeYMax then shapeYMax = y0 end
+            end
+
+            edgeCount += 1
         end
-
-        const offset = edgeCount * EDGE_STRIDE
-
-        -- Orient edges so yMin < yMax; dir tracks original winding direction
-        if y0 < y1 then
-            buffer.writef32(edgeBuf, offset, y0)
-            buffer.writef32(edgeBuf, offset + 4, y1)
-            buffer.writef32(edgeBuf, offset + 8, x0)
-            buffer.writef32(edgeBuf, offset + 12, (x1 - x0) / (y1 - y0))
-            buffer.writef32(edgeBuf, offset + 16, 1)
-            if y0 < shapeYMin then shapeYMin = y0 end
-            if y1 > shapeYMax then shapeYMax = y1 end
-
-        else
-            buffer.writef32(edgeBuf, offset, y1)
-            buffer.writef32(edgeBuf, offset + 4, y0)
-            buffer.writef32(edgeBuf, offset + 8, x1)
-            buffer.writef32(edgeBuf, offset + 12, (x0 - x1) / (y0 - y1))
-            buffer.writef32(edgeBuf, offset + 16, -1)
-            if y1 < shapeYMin then shapeYMin = y1 end
-            if y0 > shapeYMax then shapeYMax = y0 end
-        end
-
-        edgeCount += 1
     end
 
     -- Sort edges by yMin for scanline traversal

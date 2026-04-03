@@ -6,6 +6,7 @@ const Players = game:GetService("Players")
 
 const Supercorner = require(RepStorage.supercorner)
 
+const STROKE_RADIUS = 5
 const SIZE = 200
 const SLIDER_HEIGHT = 40
 const GAP = 80
@@ -103,11 +104,12 @@ local BottomLeftRadius: number? = nil
 const squircle = Supercorner.new({
 	CornerRadius = CornerRadius,
 	CornerSmoothing = CornerSmoothing,
-	MaxTopLeftRadius = SIZE,
-	MaxTopRightRadius = SIZE,
-	MaxBottomRightRadius = SIZE,
-	MaxBottomLeftRadius = SIZE,
+	MaxTopLeftRadius = SIZE / 2,
+	MaxTopRightRadius = SIZE / 2,
+	MaxBottomRightRadius = SIZE / 2,
+	MaxBottomLeftRadius = SIZE / 2,
 	Redrawable = true,
+	Stroke = if STROKE_RADIUS > 0 then STROKE_RADIUS else nil,
 })
 
 ImageLabel.ImageColor3 = Color3.fromRGB(120, 108, 70)
@@ -123,7 +125,8 @@ local function Redraw()
 		TopLeftRadius = TopLeftRadius,
 		TopRightRadius = TopRightRadius,
 		BottomRightRadius = BottomRightRadius,
-		BottomLeftRadius = BottomLeftRadius
+		BottomLeftRadius = BottomLeftRadius,
+		Stroke = if STROKE_RADIUS > 0 then STROKE_RADIUS else nil,
 	})
 
 	ImageLabel.ImageContent = squircle:GetContent()
