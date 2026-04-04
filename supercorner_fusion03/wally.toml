@@ -1,0 +1,14 @@
+[package]
+name = "cameronpcampbell/supercorner-fusion03"
+description = "Fusion 0.3 wrapper for Supercorner (A figma-inspired alternative to Roblox's UICorner)."
+version = "0.0.1"
+registry = "https://github.com/UpliftGames/wally-index"
+realm = "shared"
+license = "MIT"
+authors=[ "Cameron P Campbell" ]
+exclude=[ "**", "**/*.test.luau", "**/*.bench.luau" ]
+include=[ "src", "src/**", "default.project.json", "wally.toml", "wally.lock", "LICENSE.md", "README.md" ]
+
+[dependencies]
+supercorner = "cameronpcampbell/supercorner@0.0.8"
+fusion = "elttob/fusion@0.3.0"

@@ -22,6 +22,9 @@ sourcemap.json
 # supercorner_react
 /supercorner_react/Packages
 
+# supercorner_fusion03
+/supercorner_fusion03/Packages
+
 # IDEs
 .idea/       # JetBrains (CLion, IntelliJ, etc.)
 .vscode/
