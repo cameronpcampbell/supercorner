@@ -20,6 +20,12 @@ const SUPERCORNER_KEYS = {
     StrokeTransparency = true, StrokeGradient = true,
 }
 
+const NON_PASSTHROUGH_KEYS = {
+    BackgroundColor3 = true,
+    BackgroundTransparency = true,
+    children = true,
+}
+
 const UICORNER_HAS_INDIVIDUAL_RADII = (function()
     local reflectionService = game:GetService("ReflectionService")
     local reflection: { [any]: any } = reflectionService:GetPropertiesOfClass("UICorner")
@@ -75,11 +81,7 @@ local function GetPassthroughProps(props: { [any]: any }): { [any]: any }
     local result = {}
 
     for key, value in props do
-        if not SUPERCORNER_KEYS[key]
-            and key ~= "BackgroundColor3"
-            and key ~= "BackgroundTransparency"
-            and key ~= "children"
-        then
+        if not SUPERCORNER_KEYS[key] and not NON_PASSTHROUGH_KEYS[key] then
             result[key] = value
         end
     end
@@ -93,7 +95,7 @@ local function RenderSupercorner(
     strokeSupercorner: Supercorner.Supercorner?
 )
     local passthroughProps = GetPassthroughProps(props)
-    local children = props.children
+    local children: { [any]: any }? = props.children
 
     if fillSupercorner and strokeSupercorner then
         local fillProps = {
@@ -110,25 +112,25 @@ local function RenderSupercorner(
             fillProps[key] = value
         end
 
-        local allChildren = {
-            StrokeFolder = CreateElement("Folder", nil, {
-                StrokeImage = CreateElement("ImageLabel", {
-                    ImageContent = strokeSupercorner:GetContent(),
-                    ScaleType = Enum.ScaleType.Slice,
-                    SliceCenter = strokeSupercorner:GetSliceCenter(),
-                    SliceScale = strokeSupercorner:GetSliceScale(),
-                    BackgroundTransparency = 1,
-                    ImageColor3 = props.StrokeColor,
-                    ImageTransparency = props.StrokeTransparency,
-                    Size = UDim2.new(1, 0, 1, 0),
-                }, if props.StrokeGradient then { StrokeGradient = props.StrokeGradient } else nil)
-            }),
+        local allChildren: { [any]: any } = {
+            StrokeImage = CreateElement("ImageLabel", {
+                ImageContent = strokeSupercorner:GetContent(),
+                ScaleType = Enum.ScaleType.Slice,
+                SliceCenter = strokeSupercorner:GetSliceCenter(),
+                SliceScale = strokeSupercorner:GetSliceScale(),
+                BackgroundTransparency = 1,
+                ImageColor3 = props.StrokeColor,
+                ImageTransparency = props.StrokeTransparency,
+                Size = UDim2.new(1, 0, 1, 0),
+            }, if props.StrokeGradient then { StrokeGradient = props.StrokeGradient } else nil),
         }
 
         if children then
-            for key, child in children do
-                allChildren[key] = child
-            end
+            allChildren.ChildrenFrame = CreateElement("Frame", {
+                Size = UDim2.new(1, 0, 1, 0),
+                BackgroundTransparency = 1,
+                ZIndex = 2,
+            }, children)
         end
 
         return CreateElement("ImageLabel", fillProps, allChildren)
@@ -148,7 +150,17 @@ local function RenderSupercorner(
             fillProps[key] = value
         end
 
-        return CreateElement("ImageLabel", fillProps, children)
+        if children then
+            return CreateElement("ImageLabel", fillProps, {
+                ChildrenFrame = CreateElement("Frame", {
+                    Size = UDim2.new(1, 0, 1, 0),
+                    BackgroundTransparency = 1,
+                    ZIndex = 2,
+                }, children),
+            })
+        end
+
+        return CreateElement("ImageLabel", fillProps)
 
     elseif strokeSupercorner then
         local strokeProps = {
@@ -165,7 +177,7 @@ local function RenderSupercorner(
             strokeProps[key] = value
         end
 
-        local allChildren = nil
+        local allChildren: { [any]: any }? = nil
 
         if props.StrokeGradient or children then
             allChildren = {}
@@ -175,9 +187,11 @@ local function RenderSupercorner(
             end
 
             if children then
-                for key, child in children do
-                    allChildren[key] = child
-                end
+                allChildren.ChildrenFrame = CreateElement("Frame", {
+                    Size = UDim2.new(1, 0, 1, 0),
+                    BackgroundTransparency = 1,
+                    ZIndex = 2,
+                }, children)
             end
         end
 
@@ -185,6 +199,103 @@ local function RenderSupercorner(
     end
 
     return nil
+end
+
+local function CreateCornerClip(
+    radius: number,
+    clipPosition: UDim2,
+    fillPosition: UDim2,
+    backgroundColor: Color3?,
+    backgroundTransparency: number?,
+    strokeThickness: number?,
+    strokeColor: Color3?,
+    strokeTransparency: number?,
+    strokeGradient: any?
+)
+    local fillChildren: { [any]: any } = {
+        UICorner = CreateElement("UICorner", {
+            CornerRadius = UDim.new(0, radius),
+        }),
+    }
+
+    if (strokeThickness or 0) > 0 then
+        local gradientClone = if strokeGradient
+            then React.cloneElement(strokeGradient)
+            else nil
+
+        fillChildren.UIStroke = CreateElement("UIStroke", {
+            Thickness = strokeThickness,
+            Color = if strokeGradient then Color3.new(1, 1, 1) else strokeColor,
+            Transparency = strokeTransparency,
+            ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+            BorderStrokePosition = Enum.BorderStrokePosition.Inner,
+        }, if gradientClone then { StrokeGradient = gradientClone } else nil)
+    end
+
+    return CreateElement("Frame", {
+        Size = UDim2.new(0.5, 0, 0.5, 0),
+        Position = clipPosition,
+        BackgroundTransparency = 1,
+        ClipsDescendants = true,
+    }, {
+        Fill = CreateElement("Frame", {
+            Size = UDim2.new(2, 0, 2, 0),
+            Position = fillPosition,
+            BackgroundColor3 = backgroundColor,
+            BackgroundTransparency = backgroundTransparency,
+            ZIndex = 0,
+        }, fillChildren),
+    })
+end
+
+local function RenderClippedCornersFallback(
+    props: { [any]: any },
+    imageLabelProps: { [any]: any },
+    allChildren: { [any]: any }
+)
+    local defaultRadius = props.CornerRadius or 0
+    local bgColor = props.BackgroundColor3
+    local bgTransparency = props.BackgroundTransparency
+    local strokeThickness = props.StrokeThickness
+    local strokeColor = props.StrokeColor
+    local strokeTransparency = props.StrokeTransparency
+    local strokeGradient = props.StrokeGradient
+
+    imageLabelProps.BackgroundTransparency = 1
+
+    allChildren.TopLeftClip = CreateCornerClip(
+        props.TopLeftRadius or defaultRadius,
+        UDim2.new(0, 0, 0, 0),
+        UDim2.new(0, 0, 0, 0),
+        bgColor, bgTransparency,
+        strokeThickness, strokeColor, strokeTransparency, strokeGradient
+    )
+
+    allChildren.TopRightClip = CreateCornerClip(
+        props.TopRightRadius or defaultRadius,
+        UDim2.new(0.5, 0, 0, 0),
+        UDim2.new(-1, 0, 0, 0),
+        bgColor, bgTransparency,
+        strokeThickness, strokeColor, strokeTransparency, strokeGradient
+    )
+
+    allChildren.BottomLeftClip = CreateCornerClip(
+        props.BottomLeftRadius or defaultRadius,
+        UDim2.new(0, 0, 0.5, 0),
+        UDim2.new(0, 0, -1, 0),
+        bgColor, bgTransparency,
+        strokeThickness, strokeColor, strokeTransparency, strokeGradient
+    )
+
+    allChildren.BottomRightClip = CreateCornerClip(
+        props.BottomRightRadius or defaultRadius,
+        UDim2.new(0.5, 0, 0.5, 0),
+        UDim2.new(-1, 0, -1, 0),
+        bgColor, bgTransparency,
+        strokeThickness, strokeColor, strokeTransparency, strokeGradient
+    )
+
+    return CreateElement("ImageLabel", imageLabelProps, allChildren)
 end
 
 local function RenderFallback(props: { [any]: any })
@@ -201,23 +312,25 @@ local function RenderFallback(props: { [any]: any })
     local uiStroke = if needsStroke
         then CreateElement("UIStroke", {
             Thickness = props.StrokeThickness,
-            Color = props.StrokeColor,
+            Color = if props.StrokeGradient then Color3.new(1, 1, 1) else props.StrokeColor,
             Transparency = props.StrokeTransparency,
             ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+            BorderStrokePosition = Enum.BorderStrokePosition.Inner,
         }, if props.StrokeGradient then { StrokeGradient = props.StrokeGradient } else nil)
         else nil
 
-    local allChildren: { [any]: any } = {
-        UIStroke = uiStroke,
-    }
+    local allChildren: { [any]: any } = {}
 
     if props.children then
-        for key, child in props.children do
-            allChildren[key] = child
-        end
+        allChildren.ChildrenFrame = CreateElement("Frame", {
+            Size = UDim2.new(1, 0, 1, 0),
+            BackgroundTransparency = 1,
+            ZIndex = 2,
+        }, props.children :: { [any]: any }?)
     end
 
     if UICORNER_HAS_INDIVIDUAL_RADII then
+        allChildren.UIStroke = uiStroke
         allChildren.UICorner = CreateElement("UICorner", {
             TopLeftRadius = UDim.new(0, props.TopLeftRadius or props.CornerRadius or 0),
             TopRightRadius = UDim.new(0, props.TopRightRadius or props.CornerRadius or 0),
@@ -225,17 +338,11 @@ local function RenderFallback(props: { [any]: any })
             BottomLeftRadius = UDim.new(0, props.BottomLeftRadius or props.CornerRadius or 0),
         })
 
-    else
-        allChildren.UICorner = CreateElement("UICorner", {
-            CornerRadius = UDim.new(
-                0,
-                props.CornerRadius or props.TopLeftRadius or props.TopRightRadius or
-                props.BottomRightRadius or props.BottomLeftRadius or 0
-            )
-        })
-    end
+        return CreateElement("ImageLabel", imageLabelProps, allChildren)
 
-    return CreateElement("ImageLabel", imageLabelProps, allChildren)
+    else
+        return RenderClippedCornersFallback(props, imageLabelProps, allChildren)
+    end
 end
 
 local function WarnOnCreateOnlyPropChange(props: { [any]: any })

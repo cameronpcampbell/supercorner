@@ -1,5 +1,7 @@
 # v0.0.5
 - Added support for strokes.
+- The fallback to UICorner now uses the 4 clipped frame workaround.
+- Supercorner's can now have children.
 
 # v0.0.4
 - Added automatic redraw when redrawable props change (`CornerRadius`, `CornerSmoothing`, `TopLeftRadius`, `TopRightRadius`, `BottomRightRadius`, `BottomLeftRadius`, `PreserveSmoothing`, `AntiAlias`).
