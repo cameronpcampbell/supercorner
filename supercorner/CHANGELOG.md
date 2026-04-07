@@ -1,3 +1,6 @@
+# v0.0.9
+- Added a `supercorner.atlas` function that generates an atlas of supercorners that can be tweened.
+
 # v0.0.8
 - Rasterizer now clears only the shape's bounding-box rows instead of the full pixel buffer.
 - AA scanline loop skips solid interior pixels by scanning forward to the next edge boundary, filling the gap in a single call.
