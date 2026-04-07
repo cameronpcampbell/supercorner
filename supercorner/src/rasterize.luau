@@ -228,7 +228,10 @@ const function rasterize(
     g: number,
     b: number,
     a: number,
-    antiAlias: boolean
+    antiAlias: boolean,
+    dstXOffset: number?,
+    dstYOffset: number?,
+    dstRowStride: number?
 )
     -- Build edge table from polygon vertices, closing each sub-path independently
     local edgeBuf = ensureEdgeBuf(vertexCount)
@@ -310,7 +313,9 @@ const function rasterize(
     const colorRgb = rb + gb * 0x100 + bb * 0x10000
 
     const xBuf = ensureXBuf(math.max(1, edgeCount))
-    const rowStride = width * 4
+    const rowStride = dstRowStride or (width * 4)
+    const xByteOff = (dstXOffset or 0) * 4
+    const yOff = dstYOffset or 0
     const edgeEnd = edgeCount * EDGE_STRIDE
 
     const yStart = math.max(0, math.floor(shapeYMin))
@@ -319,9 +324,13 @@ const function rasterize(
     -- Clear only the bounding-box rows instead of the full buffer.
     -- buffer.create zero-initializes, so first render is already clean;
     -- on redraws the caller clears the previous region before calling us.
-    buffer.fill(pixelBuf, yStart * rowStride, 0, (yEnd - yStart + 1) * rowStride)
+    -- When rendering into an atlas (dstRowStride set), skip the clear since
+    -- the atlas buffer is freshly allocated and zero-initialized.
+    if not dstRowStride then
+        buffer.fill(pixelBuf, yStart * rowStride, 0, (yEnd - yStart + 1) * rowStride)
+    end
 
-    local rowOffset = yStart * rowStride
+    local rowOffset = (yOff + yStart) * rowStride + xByteOff
     local firstEdgeOffset = 0
 
     if antiAlias then

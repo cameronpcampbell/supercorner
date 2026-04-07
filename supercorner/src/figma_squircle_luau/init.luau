@@ -1,8 +1,8 @@
 --!strict
 
-const types = require("@self/types")
-const distribute = require("@self/distribute")
-const draw = require("@self/draw")
+const types = require("./figma_squircle_luau/types")
+const distribute = require("./figma_squircle_luau/distribute")
+const draw = require("./figma_squircle_luau/draw")
 
 export type FigmaSquircleParams = types.FigmaSquircleParams
 export type SvgOp = types.SvgOp

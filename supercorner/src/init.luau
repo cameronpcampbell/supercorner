@@ -1,9 +1,8 @@
 --!strict
 --!nolint LocalShadow
 
-const FigmaSquircle = require("@self/figma_squircle_luau")
-const Flatten = require("@self/flatten")
-const Rasterize = require("@self/rasterize").rasterize
+const Internal = require("@self/internal")
+const Atlas = require("@self/atlas")
 
 const AssetService = game:GetService("AssetService")
 
@@ -36,6 +35,10 @@ export type RedrawParams = {
 	AntiAlias: boolean?,
 	Stroke: number?,
 }
+
+export type CreateAtlasParams = Atlas.CreateAtlasParams
+export type AtlasParams = Atlas.AtlasParams
+export type SupercornerAtlas = Atlas.SupercornerAtlas
 
 export type Supercorner = {
 	Redraw: (self: Supercorner, params: RedrawParams) -> (),
@@ -97,110 +100,12 @@ const function GetCacheKey(width: number, height: number, params: RedrawParams):
 	return buffer.tostring(CacheKeyBuf)
 end
 
-const VERTEX_STRIDE = 8
-const SingleSubPath = buffer.create(4)
-buffer.writeu32(SingleSubPath, 0, 0)
-
--- All geometry is rendered at 2x scale for HiDPI. Params use logical pixels;
--- the render function doubles radii to match the internal coordinate space.
 const function Render(state: SupercornerState, params: RedrawParams)
-	const width, height = state.Width, state.Height
-
-	-- Smoothing of exactly 1 produces degenerate corners; clamp just below.
-	local clampedSmoothing = math.min(params.CornerSmoothing or 1, 1 - 1e-6)
-
-	local topLeftRadius, topRightRadius =
-	    params.TopLeftRadius, params.TopRightRadius
-	local bottomRightRadius, bottomLeftRadius =
-		params.BottomRightRadius, params.BottomLeftRadius
-
-	const defaultRadius2x = (params.CornerRadius or 0) * 2
-	const tl2x = if topLeftRadius then topLeftRadius * 2 else nil
-	const tr2x = if topRightRadius then topRightRadius * 2 else nil
-	const br2x = if bottomRightRadius then bottomRightRadius * 2 else nil
-	const bl2x = if bottomLeftRadius then bottomLeftRadius * 2 else nil
-
-	const outerOps = FigmaSquircle.get_svg_path({
-		width = width,
-		height = height,
-		cornerRadius = defaultRadius2x,
-		cornerSmoothing = clampedSmoothing,
-		topLeftCornerRadius = tl2x,
-		topRightCornerRadius = tr2x,
-		bottomRightCornerRadius = br2x,
-		bottomLeftCornerRadius = bl2x,
-		preserveSmoothing = params.PreserveSmoothing,
-	})
-
-	const antiAlias = if params.AntiAlias ~= nil then params.AntiAlias else true
-	const tolerance = if antiAlias then 1/8 else 1/4
-	const outerVertices, outerVertexCount = Flatten(outerOps, tolerance)
-
-	local finalVertices = outerVertices
-	local finalVertexCount = outerVertexCount
-	local subPathStarts = SingleSubPath
-	local subPathCount = 1
-
-	local stroke = params.Stroke
-	local strokePx = if stroke and stroke > 0 then stroke * 2 else 0
-	local innerW = width - 2 * strokePx
-	local innerH = height - 2 * strokePx
-
-	if strokePx > 0 and innerW > 0 and innerH > 0 then
-		const innerDefaultRadius = math.max(0, defaultRadius2x - strokePx)
-		const innerOps = FigmaSquircle.get_svg_path({
-			width = innerW,
-			height = innerH,
-			cornerRadius = innerDefaultRadius,
-			cornerSmoothing = clampedSmoothing,
-			topLeftCornerRadius =
-				if tl2x then math.max(0, tl2x - strokePx) else nil,
-			topRightCornerRadius =
-				if tr2x then math.max(0, tr2x - strokePx) else nil,
-			bottomRightCornerRadius =
-				if br2x then math.max(0, br2x - strokePx) else nil,
-			bottomLeftCornerRadius =
-				if bl2x then math.max(0, bl2x - strokePx) else nil,
-			preserveSmoothing = params.PreserveSmoothing,
-		})
-
-		const innerVertices, innerVertexCount = Flatten(innerOps, tolerance)
-
-		-- Build combined vertex buffer: outer + reversed/offset inner
-		local totalCount = outerVertexCount + innerVertexCount
-		local combined = buffer.create(totalCount * VERTEX_STRIDE)
-		buffer.copy(combined, 0, outerVertices, 0, outerVertexCount * VERTEX_STRIDE)
-
-		for idx = 0, innerVertexCount - 1 do
-			const srcIdx = (innerVertexCount - 1 - idx) * VERTEX_STRIDE
-			const dstIdx = (outerVertexCount + idx) * VERTEX_STRIDE
-			buffer.writef32(combined, dstIdx, buffer.readf32(innerVertices, srcIdx) + strokePx)
-			buffer.writef32(combined, dstIdx + 4, buffer.readf32(innerVertices, srcIdx + 4) + strokePx)
-		end
-
-		finalVertices = combined
-		finalVertexCount = totalCount
-		subPathStarts = buffer.create(8)
-		buffer.writeu32(subPathStarts, 0, 0)
-		buffer.writeu32(subPathStarts, 4, outerVertexCount)
-		subPathCount = 2
-	end
-
-	Rasterize(
-		state.PixelBuf,
-		finalVertices,
-		finalVertexCount,
-		subPathStarts,
-		subPathCount,
-		width,
-		height,
-		1, 1, 1, 1,
-		antiAlias
-	)
+	Internal.RenderToBuffer(state.PixelBuf, state.Width, state.Height, params)
 
 	state.EImage:WritePixelsBuffer(
 		Vector2.new(0, 0),
-		Vector2.new(width, height),
+		Vector2.new(state.Width, state.Height),
 		state.PixelBuf
 	)
 end
@@ -267,45 +172,8 @@ const function ClampToMaxRadii(
 	}
 end
 
--- Each corner extends (1 + smoothing) * radius along both adjacent edges.
--- The factor is doubled here because the image is in 2x internal pixel space.
--- Slice boundaries sit at the max extension of corners sharing an edge,
--- so that no corner is cut by the 9-slice.
--- For strokes, the slice must also contain the stroke's inner edge so that
--- the stretchable edge/center slices only contain uniform geometry.
-const function CalcSliceCenter(width: number, height: number, params: RedrawParams): Rect
-	local smoothing = math.min(params.CornerSmoothing or 1, 1 - 1e-6)
-	local defaultRadius = params.CornerRadius or 0
-	local factor = (1 + smoothing) * 2
-	local strokeExtension = if params.Stroke then params.Stroke * 2 else 0
-
-	local topLeftExtension = math.max((params.TopLeftRadius or defaultRadius) * factor, strokeExtension)
-	local topRightExtension = math.max((params.TopRightRadius or defaultRadius) * factor, strokeExtension)
-	local bottomRightExtension = math.max((params.BottomRightRadius or defaultRadius) * factor, strokeExtension)
-	local bottomLeftExtension = math.max((params.BottomLeftRadius or defaultRadius) * factor, strokeExtension)
-
-	local left = math.max(topLeftExtension, bottomLeftExtension)
-	local top = math.max(topLeftExtension, topRightExtension)
-	local right = math.max(topRightExtension, bottomRightExtension)
-	local bottom = math.max(bottomRightExtension, bottomLeftExtension)
-
-	return Rect.new(left, top, width - right, height - bottom)
-end
-
--- The max extension factor is 2 (smoothing at its peak), so each corner
--- occupies up to radius * 2 logical pixels along each edge.
--- The result is then doubled for 2x internal scale.
-const function CalcSize(topLeft: number, topRight: number, bottomRight: number, bottomLeft: number): (number, number)
-	local topLeftExtension = topLeft * 2
-	local topRightExtension = topRight * 2
-	local bottomRightExtension = bottomRight * 2
-	local bottomLeftExtension = bottomLeft * 2
-
-	local width = math.max(1, math.ceil(math.max(topLeftExtension + topRightExtension, bottomLeftExtension + bottomRightExtension))) * 2
-	local height = math.max(1, math.ceil(math.max(topLeftExtension + bottomLeftExtension, topRightExtension + bottomRightExtension))) * 2
-
-	return width, height
-end
+const CalcSliceCenter = Internal.CalcSliceCenter
+const CalcSize = Internal.CalcSize
 
 const function NewRedrawable(
 	width: number,
@@ -549,6 +417,8 @@ end
 
 return {
 	new = New,
+	atlas = Atlas.atlas,
 	GetCacheSize = GetCacheSize,
 	GetStaticCacheSize = GetStaticCacheSize,
+	GetAtlasCacheSize = Atlas.GetAtlasCacheSize,
 }

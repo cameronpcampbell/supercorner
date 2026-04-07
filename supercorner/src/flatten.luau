@@ -26,10 +26,10 @@ const function flatten(ops: { SvgOp }, tolerance: number): (buffer, number)
 		const t = op.type
 
 		if t == "c" then
-			estimate += 16
+			estimate += 10
 
 		elseif t == "a" then
-			estimate += 12
+			estimate += 8
 
 		else
 			estimate += 1
