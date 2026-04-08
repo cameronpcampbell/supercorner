@@ -6,7 +6,7 @@
         "StarterPlayer": {
             "StarterPlayerScripts": {
                 "Test": {
-                    "$path": "test",
+                    "$path": "test/test_atlas.client.luau",
 
                     "Packages": {
                         "$path": "packages.project.json"

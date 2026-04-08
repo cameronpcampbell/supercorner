@@ -65,12 +65,15 @@ local function RenderToBuffer(pixelBuf: buffer, width: number, height: number, p
 	local innerH = height - 2 * strokePx
 
 	if strokePx > 0 and innerW > 0 and innerH > 0 then
+		-- Cap inner smoothing slightly below 1 so the arc section has real size,
+		-- preventing a degenerate vertex where two cubics meet at a sharp point.
+		local innerSmoothing = math.min(clampedSmoothing, 0.99)
 		local innerDefaultRadius = math.max(0, defaultRadius2x - strokePx)
 		local innerOps = FigmaSquircle.get_svg_path({
 			width = innerW,
 			height = innerH,
 			cornerRadius = innerDefaultRadius,
-			cornerSmoothing = clampedSmoothing,
+			cornerSmoothing = innerSmoothing,
 			topLeftCornerRadius =
 				if tl2x then math.max(0, tl2x - strokePx) else nil,
 			topRightCornerRadius =
@@ -130,7 +133,7 @@ local function CalcSliceCenter(width: number, height: number, params: RedrawPara
 	local smoothing = math.min(params.CornerSmoothing or 1, 1 - 1e-6)
 	local defaultRadius = params.CornerRadius or 0
 	local factor = (1 + smoothing) * 2
-	local strokeExtension = if params.Stroke then params.Stroke * 2 else 0
+	local strokeExtension = if params.Stroke then params.Stroke * 2 + 2 else 0
 
 	local topLeftExtension = math.max((params.TopLeftRadius or defaultRadius) * factor, strokeExtension)
 	local topRightExtension = math.max((params.TopRightRadius or defaultRadius) * factor, strokeExtension)
@@ -148,14 +151,15 @@ end
 -- The max extension factor is 2 (smoothing at its peak), so each corner
 -- occupies up to radius * 2 logical pixels along each edge.
 -- The result is then doubled for 2x internal scale.
-local function CalcSize(topLeft: number, topRight: number, bottomRight: number, bottomLeft: number): (number, number)
-	local topLeftExtension = topLeft * 2
-	local topRightExtension = topRight * 2
-	local bottomRightExtension = bottomRight * 2
-	local bottomLeftExtension = bottomLeft * 2
+local function CalcSize(topLeft: number, topRight: number, bottomRight: number, bottomLeft: number, stroke: number?): (number, number)
+	local strokeExt = if stroke and stroke > 0 then stroke + 1 else 0
+	local topLeftExtension = math.max(topLeft * 2, strokeExt)
+	local topRightExtension = math.max(topRight * 2, strokeExt)
+	local bottomRightExtension = math.max(bottomRight * 2, strokeExt)
+	local bottomLeftExtension = math.max(bottomLeft * 2, strokeExt)
 
-	local width = math.max(1, math.ceil(math.max(topLeftExtension + topRightExtension, bottomLeftExtension + bottomRightExtension))) * 2
-	local height = math.max(1, math.ceil(math.max(topLeftExtension + bottomLeftExtension, topRightExtension + bottomRightExtension))) * 2
+	local width = (math.max(1, math.ceil(math.max(topLeftExtension + topRightExtension, bottomLeftExtension + bottomRightExtension))) + 1) * 2
+	local height = (math.max(1, math.ceil(math.max(topLeftExtension + bottomLeftExtension, topRightExtension + bottomRightExtension))) + 1) * 2
 
 	return width, height
 end

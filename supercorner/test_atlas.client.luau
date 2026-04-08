@@ -118,6 +118,7 @@ local function RebuildAtlas()
 		Start = { CornerRadius = StartRadius, CornerSmoothing = StartSmoothing },
 		End = { CornerRadius = EndRadius, BottomLeftRadius = 65, CornerSmoothing = EndSmoothing },
 		Keypoints = KEYPOINTS,
+		Stroke = 5
 	})
 
 	local a = atlas :: Supercorner.SupercornerAtlas

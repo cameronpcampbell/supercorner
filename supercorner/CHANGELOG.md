@@ -1,3 +1,9 @@
+# v0.1.0
+- Image sizing now accounts for stroke width, preventing strokes from being clipped or rendered as solid fills at small corner radii.
+- Slice center calculation now includes a 2px margin past the inner stroke edge to prevent anti-aliased pixels from being stretched by 9-slice.
+- Image dimensions now guarantee at least 2 internal pixels of stretchable center for valid 9-slicing.
+- Inner stroke path smoothing is capped at 0.99 to prevent a degenerate arc vertex that caused missing pixels at inner corners.
+
 # v0.0.9
 - Added a `supercorner.atlas` function that generates an atlas of supercorners that can be tweened.
 

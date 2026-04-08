@@ -177,7 +177,8 @@ local function Atlas(params: AtlasParams): SupercornerAtlas
 				interpolated.TopLeftRadius or interpolated.CornerRadius or 0,
 				interpolated.TopRightRadius or interpolated.CornerRadius or 0,
 				interpolated.BottomRightRadius or interpolated.CornerRadius or 0,
-				interpolated.BottomLeftRadius or interpolated.CornerRadius or 0
+				interpolated.BottomLeftRadius or interpolated.CornerRadius or 0,
+				params.Stroke
 			)
 
 			result[idx] = {

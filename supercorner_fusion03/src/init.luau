@@ -3,7 +3,10 @@
 local Fusion =
 	require(script.Parent.Parent.Parent._Index["elttob_fusion@0.3.0"].fusion)
 local Supercorner =
-	require(script.Parent.Parent.Parent._Index["cameronpcampbell_supercorner@0.0.8"].supercorner)
+	require(script.Parent.Parent.Parent._Index["cameronpcampbell_supercorner@0.0.9"].supercorner)
+
+local Shared = require(script.shared)
+local AtlasFusion = require(script.atlas)
 
 local Peek, Children = Fusion.peek, Fusion.Children
 
@@ -24,20 +27,6 @@ const SUPERCORNER_KEYS = {
 	StrokeThickness = true, StrokeColor = true,
 	StrokeTransparency = true, StrokeGradient = true,
 }
-
-const NON_PASSTHROUGH_KEYS = {
-	BackgroundColor3 = true,
-	BackgroundTransparency = true,
-}
-
-const UICORNER_HAS_INDIVIDUAL_RADII = (function()
-	local reflectionService = game:GetService("ReflectionService")
-	local reflection: { [any]: any } = reflectionService:GetPropertiesOfClass("UICorner")
-
-	return
-		reflection.TopLeftRadius and reflection.TopRightRadius and
-		reflection.BottomLeftRadius and reflection.BottomRightRadius
-end)()
 
 local function TryCreateSupercorner(props: { [any]: any }, stroke: number): Supercorner.Supercorner?
 	local _ok, supercorner = pcall(Supercorner.new, {
@@ -65,20 +54,6 @@ local function TryCreateSupercorner(props: { [any]: any }, stroke: number): Supe
 	return supercorner
 end
 
-local function GetPassthroughProps(props: { [any]: any }): { [any]: any }
-	local result = {}
-
-	for key, value in props do
-		if key == Children then continue end
-		if SUPERCORNER_KEYS[key] then continue end
-		if NON_PASSTHROUGH_KEYS[key] then continue end
-
-		result[key] = value
-	end
-
-	return result
-end
-
 local function UpdateSupercornerValues(
 	sc: Supercorner.Supercorner,
 	contentState: Fusion.Value<Content?>,
@@ -88,218 +63,6 @@ local function UpdateSupercornerValues(
 	contentState:set(sc:GetContent())
 	sliceCenterState:set(sc:GetSliceCenter())
 	sliceScaleState:set(sc:GetSliceScale())
-end
-
-local function CreateCornerClip(
-	scope: Scope,
-	radius: UsedAs<number>,
-	clipPosition: UDim2,
-	fillPosition: UDim2,
-	backgroundColor: UsedAs<Color3>?,
-	backgroundTransparency: UsedAs<number>?,
-	strokeThickness: UsedAs<number>?,
-	strokeColor: UsedAs<Color3>?,
-	strokeTransparency: UsedAs<number>?,
-	strokeGradient: Instance?
-): Instance
-	local fillChildren: { [any]: any } = {
-		UICorner = scope:New("UICorner") {
-			CornerRadius = scope:Computed(function(use)
-				return UDim.new(0, use(radius))
-			end),
-		},
-	}
-
-	local peekedStrokeThickness = Peek(strokeThickness)
-
-	if (peekedStrokeThickness or 0) > 0 then
-		local strokeChildren: { [any]: any }? = nil
-
-		if strokeGradient then
-			strokeChildren = { StrokeGradient = strokeGradient:Clone() }
-		end
-
-		fillChildren.UIStroke = scope:New("UIStroke") {
-			Thickness = strokeThickness,
-			Color = if strokeGradient then Color3.new(1, 1, 1) else strokeColor,
-			Transparency = strokeTransparency,
-			ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
-			BorderStrokePosition = Enum.BorderStrokePosition.Inner,
-			[Children] = strokeChildren,
-		}
-	end
-
-	return scope:New("Frame") {
-		Size = UDim2.new(0.5, 0, 0.5, 0),
-		Position = clipPosition,
-		BackgroundTransparency = 1,
-		ClipsDescendants = true,
-
-		[Children] = {
-			Fill = scope:New("Frame") {
-				Size = UDim2.new(2, 0, 2, 0),
-				Position = fillPosition,
-				BackgroundColor3 = backgroundColor,
-				BackgroundTransparency = backgroundTransparency,
-				ZIndex = 0,
-				[Children] = fillChildren,
-			},
-		},
-	}
-end
-
-local function RenderClippedCornersFallback(
-	scope: Scope,
-	props: { [any]: any },
-	passthroughProps: { [any]: any },
-	userChildren: Child?
-): Instance
-	local defaultRadius = scope:Computed(function(use)
-		return use(props.CornerRadius) or 0
-	end)
-
-	local bgColor = props.BackgroundColor3
-	local bgTransparency = props.BackgroundTransparency
-	local strokeThickness = props.StrokeThickness
-	local strokeColor = props.StrokeColor
-	local strokeTransparency = props.StrokeTransparency
-	local peekedStrokeGradient = Peek(props.StrokeGradient)
-
-	local computeTopLeftRadius = scope:Computed(function(use)
-		return use(props.TopLeftRadius) or use(defaultRadius)
-	end)
-
-	local computeTopRightRadius = scope:Computed(function(use)
-		return use(props.TopRightRadius) or use(defaultRadius)
-	end)
-
-	local computeBottomLeftRadius = scope:Computed(function(use)
-		return use(props.BottomLeftRadius) or use(defaultRadius)
-	end)
-
-	local computeBottomRightRadius = scope:Computed(function(use)
-		return use(props.BottomRightRadius) or use(defaultRadius)
-	end)
-
-	local rootProps: { [any]: any } = {
-		BackgroundTransparency = 1,
-
-		[Children] = {
-			TopLeftClip = CreateCornerClip(
-				scope, computeTopLeftRadius,
-				UDim2.new(0, 0, 0, 0), UDim2.new(0, 0, 0, 0),
-				bgColor, bgTransparency,
-				strokeThickness, strokeColor, strokeTransparency, peekedStrokeGradient
-			),
-
-			TopRightClip = CreateCornerClip(
-				scope, computeTopRightRadius,
-				UDim2.new(0.5, 0, 0, 0), UDim2.new(-1, 0, 0, 0),
-				bgColor, bgTransparency,
-				strokeThickness, strokeColor, strokeTransparency, peekedStrokeGradient
-			),
-
-			BottomLeftClip = CreateCornerClip(
-				scope, computeBottomLeftRadius,
-				UDim2.new(0, 0, 0.5, 0), UDim2.new(0, 0, -1, 0),
-				bgColor, bgTransparency,
-				strokeThickness, strokeColor, strokeTransparency, peekedStrokeGradient
-			),
-
-			BottomRightClip = CreateCornerClip(
-				scope, computeBottomRightRadius,
-				UDim2.new(0.5, 0, 0.5, 0), UDim2.new(-1, 0, -1, 0),
-				bgColor, bgTransparency,
-				strokeThickness, strokeColor, strokeTransparency, peekedStrokeGradient
-			),
-
-			ChildrenFrame = if userChildren then scope:New("Frame") {
-				Size = UDim2.new(1, 0, 1, 0),
-				BackgroundTransparency = 1,
-				ZIndex = 2,
-				[Children] = userChildren,
-			} else nil,
-		},
-	}
-
-	for key, value in passthroughProps do
-		rootProps[key] = value
-	end
-
-	return scope:New("ImageLabel")(rootProps)
-end
-
-local function RenderFallback(scope: Scope, props: { [any]: any }): Instance
-	local passthroughProps = GetPassthroughProps(props)
-	local userChildren: Child? = props[Children]
-
-	local needsStroke = scope:Computed(function(use)
-		return (use(props.StrokeThickness) or 0) > 0
-	end)
-
-	if UICORNER_HAS_INDIVIDUAL_RADII then
-		local allChildren: { [any]: any } = {
-			UICorner = scope:New("UICorner") {
-				TopLeftRadius = scope:Computed(function(use)
-					return UDim.new(0, use(props.TopLeftRadius) or use(props.CornerRadius) or 0)
-				end),
-
-				TopRightRadius = scope:Computed(function(use)
-					return UDim.new(0, use(props.TopRightRadius) or use(props.CornerRadius) or 0)
-				end),
-
-				BottomRightRadius = scope:Computed(function(use)
-					return UDim.new(0, use(props.BottomRightRadius) or use(props.CornerRadius) or 0)
-				end),
-
-				BottomLeftRadius = scope:Computed(function(use)
-					return UDim.new(0, use(props.BottomLeftRadius) or use(props.CornerRadius) or 0)
-				end),
-			},
-
-			UIStroke = scope:Computed(function(use, innerScope: Fusion.Scope): Instance?
-				if not use(needsStroke) then return nil end
-
-				local peekedStrokeGradient = Peek(props.StrokeGradient)
-				local strokeChildren: { [any]: any }? = nil
-
-				if peekedStrokeGradient then
-					strokeChildren = { StrokeGradient = peekedStrokeGradient:Clone() }
-				end
-
-				return innerScope:New("UIStroke") {
-					Thickness = props.StrokeThickness,
-					Color = if peekedStrokeGradient then Color3.new(1, 1, 1) else props.StrokeColor,
-					Transparency = props.StrokeTransparency,
-					ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
-					BorderStrokePosition = Enum.BorderStrokePosition.Inner,
-					[Children] = strokeChildren,
-				}
-			end),
-
-			ChildrenFrame = if userChildren then scope:New("Frame") {
-				Size = UDim2.new(1, 0, 1, 0),
-				BackgroundTransparency = 1,
-				ZIndex = 2,
-				[Children] = userChildren,
-			} else nil,
-		}
-
-		local rootProps: { [any]: any } = {
-			BackgroundColor3 = props.BackgroundColor3,
-			BackgroundTransparency = props.BackgroundTransparency,
-			[Children] = allChildren,
-		}
-
-		for key, value in passthroughProps do
-			rootProps[key] = value
-		end
-
-		return scope:New("ImageLabel")(rootProps)
-
-	else
-		return RenderClippedCornersFallback(scope, props, passthroughProps, userChildren)
-	end
 end
 
 local function SupercornerFusion(
@@ -328,7 +91,7 @@ local function SupercornerFusion(
 		[any]: any,
 	}
 ): Instance
-	local passthroughProps = GetPassthroughProps(props)
+	local passthroughProps = Shared.GetPassthroughProps(props, SUPERCORNER_KEYS)
 	local userChildren: Child? = props[Children]
 
 	-- Warn if create-only props change
@@ -412,7 +175,34 @@ local function SupercornerFusion(
 	end
 
 	if useFallback then
-		return RenderFallback(scope, props)
+		local defaultRadius = scope:Computed(function(use)
+			return use(props.CornerRadius) or 0
+		end)
+
+		return Shared.RenderFallback(scope, {
+			topLeft = scope:Computed(function(use)
+				return use(props.TopLeftRadius) or use(defaultRadius)
+			end),
+
+			topRight = scope:Computed(function(use)
+				return use(props.TopRightRadius) or use(defaultRadius)
+			end),
+
+			bottomRight = scope:Computed(function(use)
+				return use(props.BottomRightRadius) or use(defaultRadius)
+			end),
+
+			bottomLeft = scope:Computed(function(use)
+				return use(props.BottomLeftRadius) or use(defaultRadius)
+			end),
+		}, passthroughProps, userChildren, {
+			bgColor = props.BackgroundColor3,
+			bgTransparency = props.BackgroundTransparency,
+			strokeThickness = props.StrokeThickness,
+			strokeColor = props.StrokeColor,
+			strokeTransparency = props.StrokeTransparency,
+			strokeGradient = Peek(props.StrokeGradient),
+		})
 	end
 
 	-- Geometry change observer — redraw on prop changes
@@ -572,4 +362,7 @@ local function SupercornerFusion(
 	return scope:New("Frame")(rootProps)
 end
 
-return SupercornerFusion
+return {
+	new = SupercornerFusion,
+	atlas = AtlasFusion,
+}

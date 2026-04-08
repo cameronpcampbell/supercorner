@@ -396,13 +396,13 @@ const function New(params: CreateParams): Supercorner
 		local maxBottomRight: number = params.MaxBottomRightRadius or math.max(maxDefault, bottomRight)
 		local maxBottomLeft: number = params.MaxBottomLeftRadius or math.max(maxDefault, bottomLeft)
 
-		local width, height = CalcSize(maxTopLeft, maxTopRight, maxBottomRight, maxBottomLeft)
+		local width, height = CalcSize(maxTopLeft, maxTopRight, maxBottomRight, maxBottomLeft, params.Stroke)
 		local clampedParams = ClampToMaxRadii(params, maxTopLeft, maxTopRight, maxBottomRight, maxBottomLeft)
 
 		return NewRedrawable(width, height, clampedParams, maxTopLeft, maxTopRight, maxBottomRight, maxBottomLeft)
 	end
 
-	local width, height = CalcSize(topLeft, topRight, bottomRight, bottomLeft)
+	local width, height = CalcSize(topLeft, topRight, bottomRight, bottomLeft, params.Stroke)
 
 	return NewStatic(width, height, params)
 end
