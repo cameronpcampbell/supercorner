@@ -10,5 +10,5 @@ exclude=[ "**", "**/*.test.luau", "**/*.bench.luau" ]
 include=[ "src", "src/**", "default.project.json", "wally.toml", "wally.lock", "LICENSE.md", "README.md" ]
 
 [dependencies]
-supercorner = "cameronpcampbell/supercorner@0.0.8"
+supercorner = "cameronpcampbell/supercorner@0.0.9"
 fusion = "elttob/fusion@0.3.0"

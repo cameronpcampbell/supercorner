@@ -116,7 +116,7 @@ local function RebuildAtlas()
 
 	atlas = Atlas({
 		Start = { CornerRadius = StartRadius, CornerSmoothing = StartSmoothing },
-		End = { CornerRadius = EndRadius, CornerSmoothing = EndSmoothing },
+		End = { CornerRadius = EndRadius, BottomLeftRadius = 65, CornerSmoothing = EndSmoothing },
 		Keypoints = KEYPOINTS,
 	})
 
