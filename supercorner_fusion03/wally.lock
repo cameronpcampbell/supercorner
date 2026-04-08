@@ -4,13 +4,13 @@ registry = "test"
 
 [[package]]
 name = "cameronpcampbell/supercorner"
-version = "0.0.9"
+version = "0.1.0"
 dependencies = []
 
 [[package]]
 name = "cameronpcampbell/supercorner-fusion03"
 version = "0.0.1"
-dependencies = [["fusion", "elttob/fusion@0.3.0"], ["supercorner", "cameronpcampbell/supercorner@0.0.9"]]
+dependencies = [["fusion", "elttob/fusion@0.3.0"], ["supercorner", "cameronpcampbell/supercorner@0.1.0"]]
 
 [[package]]
 name = "elttob/fusion"

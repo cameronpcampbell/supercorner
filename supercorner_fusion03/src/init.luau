@@ -3,7 +3,7 @@
 local Fusion =
 	require(script.Parent.Parent.Parent._Index["elttob_fusion@0.3.0"].fusion)
 local Supercorner =
-	require(script.Parent.Parent.Parent._Index["cameronpcampbell_supercorner@0.0.9"].supercorner)
+	require(script.Parent.Parent.Parent._Index["cameronpcampbell_supercorner@0.1.0"].supercorner)
 
 local Shared = require(script.shared)
 local AtlasFusion = require(script.atlas)
