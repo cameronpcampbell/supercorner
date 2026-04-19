@@ -1,0 +1,20 @@
+{
+    "name": "supercorner",
+    "tree": {
+        "$className": "DataModel",
+
+        "ReplicatedStorage": {
+            "supercorner": {
+                "$path": "default.project.json"
+            }
+        },
+
+        "StarterPlayer": {
+            "StarterPlayerScripts": {
+                "test": {
+                    "$path": "test_atlas.client.luau"
+                }
+            }
+        }
+    }
+}

@@ -1,0 +1,473 @@
+--!strict
+--!nolint LocalShadow
+
+-- Edge buffer layout (f32 fields at byte offsets)
+-- [0] yMin  [4] yMax  [8] xAtYmin  [12] dxPerDy  [16] dir (+1/-1)
+const EDGE_STRIDE = 20
+
+-- Vertex buffer layout (f32 fields at byte offsets)
+-- [0] x  [4] y
+const VERTEX_STRIDE = 8
+
+-- Module-level scratch buffers, reused across renders to avoid per-call allocation.
+-- Each buffer grows as needed but is never shrunk.
+local scratchEdgeBuf = buffer.create(0)
+local scratchEdgeCap = 0
+local scratchXBuf = buffer.create(4)
+local scratchXCap = 1
+local scratchAreaBuf = buffer.create(0)
+local scratchFillBuf = buffer.create(0)
+local scratchScanlineCap = 0
+
+local function ensureEdgeBuf(needed: number): buffer
+    if needed > scratchEdgeCap then
+        scratchEdgeCap = needed
+        scratchEdgeBuf = buffer.create(needed * EDGE_STRIDE)
+    end
+
+    return scratchEdgeBuf
+end
+
+local function ensureXBuf(needed: number): buffer
+    if needed > scratchXCap then
+        scratchXCap = needed
+        scratchXBuf = buffer.create(needed * 4)
+    end
+
+    return scratchXBuf
+end
+
+local function ensureScanlineBufs(width: number): (buffer, buffer)
+    if width > scratchScanlineCap then
+        scratchScanlineCap = width
+        scratchAreaBuf = buffer.create(width * 4)
+        scratchFillBuf = buffer.create(width * 4)
+    end
+
+    return scratchAreaBuf, scratchFillBuf
+end
+
+-- Fills a span of pixels with a u32 color by writing one pixel then exponentially
+-- doubling via buffer.copy. This is needed as buffer.fill sets every byte to the same
+-- 8-bit value, so it can't write a repeating 4-byte RGBA pattern.
+const function fillInterior(
+    pixelBuf: buffer,
+    spanStart: number,
+    span: number,
+    colorU32: number
+)
+    buffer.writeu32(pixelBuf, spanStart, colorU32)
+
+    local filled = 1
+    while filled < span do
+        const chunk = math.min(filled, span - filled)
+        buffer.copy(pixelBuf, spanStart + filled * 4, pixelBuf, spanStart, chunk * 4)
+        filled += chunk
+    end
+end
+
+-- Clip an edge intersection pair to pixel bounds and fill the span
+const function fillSpanSolid(
+    pixelBuf: buffer,
+    rowOffset: number,
+    xLeft: number,
+    xRight: number,
+    width: number,
+    colorU32: number
+)
+    const pxLeft = math.max(0, math.ceil(xLeft))
+    const pxRight = math.min(width - 1, math.floor(xRight))
+    const span = pxRight - pxLeft + 1
+
+    if span <= 0 then
+        return
+    end
+
+    fillInterior(pixelBuf, rowOffset + pxLeft * 4, span, colorU32)
+end
+
+-- Signed area coverage for one edge within a single scanline band [yTop, yTop+1].
+-- areaBuf accumulates the pixel-local signed area (used for edge pixels).
+-- fillBuf accumulates the winding delta (propagated across the scanline via prefix sum).
+const function processEdgeAA(
+    areaBuf: buffer,
+    fillBuf: buffer,
+    yMin: number,
+    yMax: number,
+    xAtYmin: number,
+    dxPerDy: number,
+    dir: number,
+    yTop: number,
+    width: number
+)
+    local sy0 = math.max(yTop, yMin)
+    local sy1 = math.min(yTop + 1, yMax)
+    if sy1 <= sy0 then
+        return
+    end
+
+    const x0 = xAtYmin + (sy0 - yMin) * dxPerDy
+    const x1 = xAtYmin + (sy1 - yMin) * dxPerDy
+    const h = sy1 - sy0
+
+    const xLo = math.min(x0, x1)
+    const xHi = math.max(x0, x1)
+    const ix0 = math.clamp(math.floor(xLo), 0, width - 1)
+    const ix1 = math.clamp(math.floor(xHi), 0, width - 1)
+
+    -- Near-vertical edges: single pixel column
+    if ix0 == ix1 then
+        const avgX = math.clamp(((x0 - ix0) + (x1 - ix0)) / 2, 0, 1)
+        const covered = h * (1 - avgX)
+
+        const off = ix0 * 4
+        buffer.writef32(areaBuf, off, buffer.readf32(areaBuf, off) + dir * covered)
+        buffer.writef32(fillBuf, off, buffer.readf32(fillBuf, off) + dir * h)
+        return
+    end
+
+    -- Near-horizontal edges: split at integer x boundaries
+    const xToY = h / (x1 - x0)
+
+    for ix = ix0, ix1 do
+        const cx0 = math.max(ix, xLo)
+        const cx1 = math.min(ix + 1, xHi)
+
+        if cx1 <= cx0 then
+            continue
+        end
+
+        const cy0 = sy0 + (cx0 - x0) * xToY
+        const cy1 = sy0 + (cx1 - x0) * xToY
+        const subH = math.abs(cy1 - cy0)
+        const avgX = math.clamp(((cx0 - ix) + (cx1 - ix)) / 2, 0, 1)
+        const covered = subH * (1 - avgX)
+
+        const off = ix * 4
+        buffer.writef32(areaBuf, off, buffer.readf32(areaBuf, off) + dir * covered)
+        buffer.writef32(fillBuf, off, buffer.readf32(fillBuf, off) + dir * subH)
+    end
+end
+
+-- Scan forward from `start` to find the next pixel with edge data.
+-- Returns the index of the first pixel with non-zero areaBuf or fillBuf,
+-- or scanXMax + 1 if no such pixel exists.
+const function findNextEdge(areaBuf: buffer, fillBuf: buffer, start: number, scanXMax: number): number
+    local idx = start
+
+    while idx <= scanXMax do
+        const off = idx * 4
+
+        if buffer.readf32(areaBuf, off) ~= 0 or buffer.readf32(fillBuf, off) ~= 0 then
+            break
+        end
+
+        idx += 1
+    end
+
+    return idx
+end
+
+-- Find sorted edge-scanline intersections for the non-AA path.
+-- Returns updated firstEdgeOffset (for active edge tracking) and intersection count.
+const function findIntersections(
+    edgeBuf: buffer,
+    edgeEnd: number,
+    firstEdgeOffset: number,
+    xBuf: buffer,
+    scanY: number
+): (number, number)
+    -- Skip edges that end before this scanline
+    while firstEdgeOffset < edgeEnd and buffer.readf32(edgeBuf, firstEdgeOffset + 4) <= scanY do
+        firstEdgeOffset += EDGE_STRIDE
+    end
+
+    local xCount = 0
+
+    for eOffset = firstEdgeOffset, edgeEnd - EDGE_STRIDE, EDGE_STRIDE do
+        const yMin = buffer.readf32(edgeBuf, eOffset)
+
+        if yMin > scanY then
+            break
+        end
+
+        const yMax = buffer.readf32(edgeBuf, eOffset + 4)
+
+        if yMax <= scanY then
+            continue
+        end
+
+        const xAtYmin = buffer.readf32(edgeBuf, eOffset + 8)
+        const dxPerDy = buffer.readf32(edgeBuf, eOffset + 12)
+        const xIntersect = xAtYmin + (scanY - yMin) * dxPerDy
+
+        -- Insertion sort into xBuf
+        local pos = xCount
+
+        while pos > 0 and buffer.readf32(xBuf, (pos - 1) * 4) > xIntersect do
+            buffer.writef32(xBuf, pos * 4, buffer.readf32(xBuf, (pos - 1) * 4))
+            pos -= 1
+        end
+
+        buffer.writef32(xBuf, pos * 4, xIntersect)
+        xCount += 1
+    end
+
+    return firstEdgeOffset, xCount
+end
+
+const function rasterize(
+    pixelBuf: buffer,
+    vertices: buffer,
+    vertexCount: number,
+    subPathStarts: buffer,
+    subPathCount: number,
+    width: number,
+    height: number,
+    r: number,
+    g: number,
+    b: number,
+    a: number,
+    antiAlias: boolean,
+    dstXOffset: number?,
+    dstYOffset: number?,
+    dstRowStride: number?
+)
+    -- Build edge table from polygon vertices, closing each sub-path independently
+    local edgeBuf = ensureEdgeBuf(vertexCount)
+    local edgeCount = 0
+    local shapeYMin = math.huge
+    local shapeYMax = -math.huge
+
+    for s = 0, subPathCount - 1 do
+        const startIdx = buffer.readu32(subPathStarts, s * 4)
+        const endIdx = if s < subPathCount - 1
+            then buffer.readu32(subPathStarts, (s + 1) * 4)
+            else vertexCount
+
+        for i = startIdx, endIdx - 1 do
+            const j = if i < endIdx - 1 then i + 1 else startIdx
+
+            const iOff = i * VERTEX_STRIDE
+            const x0 = buffer.readf32(vertices, iOff)
+            const y0 = buffer.readf32(vertices, iOff + 4)
+            const jOff = j * VERTEX_STRIDE
+            const x1 = buffer.readf32(vertices, jOff)
+            const y1 = buffer.readf32(vertices, jOff + 4)
+
+            if y0 == y1 then
+                continue
+            end
+
+            const offset = edgeCount * EDGE_STRIDE
+
+            -- Orient edges so yMin < yMax; dir tracks original winding direction
+            if y0 < y1 then
+                buffer.writef32(edgeBuf, offset, y0)
+                buffer.writef32(edgeBuf, offset + 4, y1)
+                buffer.writef32(edgeBuf, offset + 8, x0)
+                buffer.writef32(edgeBuf, offset + 12, (x1 - x0) / (y1 - y0))
+                buffer.writef32(edgeBuf, offset + 16, 1)
+                if y0 < shapeYMin then shapeYMin = y0 end
+                if y1 > shapeYMax then shapeYMax = y1 end
+
+            else
+                buffer.writef32(edgeBuf, offset, y1)
+                buffer.writef32(edgeBuf, offset + 4, y0)
+                buffer.writef32(edgeBuf, offset + 8, x1)
+                buffer.writef32(edgeBuf, offset + 12, (x0 - x1) / (y0 - y1))
+                buffer.writef32(edgeBuf, offset + 16, -1)
+                if y1 < shapeYMin then shapeYMin = y1 end
+                if y0 > shapeYMax then shapeYMax = y0 end
+            end
+
+            edgeCount += 1
+        end
+    end
+
+    -- Sort edges by yMin for scanline traversal
+    local edgeIndices = table.create(edgeCount) :: { number }
+
+    for idx = 0, edgeCount - 1 do
+        edgeIndices[idx + 1] = idx
+    end
+
+    table.sort(edgeIndices, function(a: number, b: number)
+        return buffer.readf32(edgeBuf, a * EDGE_STRIDE) < buffer.readf32(edgeBuf, b * EDGE_STRIDE)
+    end)
+
+    local sortedBuf = buffer.create(edgeCount * EDGE_STRIDE)
+
+    for idx = 0, edgeCount - 1 do
+        buffer.copy(sortedBuf, idx * EDGE_STRIDE, edgeBuf, edgeIndices[idx + 1] * EDGE_STRIDE, EDGE_STRIDE)
+    end
+
+    buffer.copy(edgeBuf, 0, sortedBuf, 0, edgeCount * EDGE_STRIDE)
+
+    const rb = math.floor(r * 255 + 0.5)
+    const gb = math.floor(g * 255 + 0.5)
+    const bb = math.floor(b * 255 + 0.5)
+    const ab = math.floor(a * 255 + 0.5)
+
+    const colorU32 = rb + gb * 0x100 + bb * 0x10000 + ab * 0x1000000
+    const colorRgb = rb + gb * 0x100 + bb * 0x10000
+
+    const xBuf = ensureXBuf(math.max(1, edgeCount))
+    const rowStride = dstRowStride or (width * 4)
+    const xByteOff = (dstXOffset or 0) * 4
+    const yOff = dstYOffset or 0
+    const edgeEnd = edgeCount * EDGE_STRIDE
+
+    const yStart = math.max(0, math.floor(shapeYMin))
+    const yEnd = math.min(height - 1, math.floor(shapeYMax))
+
+    -- Clear only the bounding-box rows instead of the full buffer.
+    -- buffer.create zero-initializes, so first render is already clean;
+    -- on redraws the caller clears the previous region before calling us.
+    -- When rendering into an atlas (dstRowStride set), skip the clear since
+    -- the atlas buffer is freshly allocated and zero-initialized.
+    if not dstRowStride then
+        buffer.fill(pixelBuf, yStart * rowStride, 0, (yEnd - yStart + 1) * rowStride)
+    end
+
+    local rowOffset = (yOff + yStart) * rowStride + xByteOff
+    local firstEdgeOffset = 0
+
+    if antiAlias then
+        const areaBuf, fillBuf = ensureScanlineBufs(width)
+        -- Initialize to full width so the first scanline clears any stale data
+        -- left over from a previous render in the reused scratch buffers.
+        local prevXMin = 0
+        local prevXMax = width - 1
+
+        for y = yStart, yEnd do
+            -- Only clear the pixel range dirtied by the previous scanline
+            if prevXMin <= prevXMax then
+                const clearOff = prevXMin * 4
+                const clearLen = (prevXMax - prevXMin + 1) * 4
+                buffer.fill(areaBuf, clearOff, 0, clearLen)
+                buffer.fill(fillBuf, clearOff, 0, clearLen)
+            end
+
+            local scanXMin = width
+            local scanXMax = -1
+
+            -- Advance past edges whose yMax is behind this scanline
+            while firstEdgeOffset < edgeEnd and buffer.readf32(edgeBuf, firstEdgeOffset + 4) <= y do
+                firstEdgeOffset += EDGE_STRIDE
+            end
+
+            for eOffset = firstEdgeOffset, edgeEnd - EDGE_STRIDE, EDGE_STRIDE do
+                const eYMin = buffer.readf32(edgeBuf, eOffset)
+
+                if eYMin >= y + 1 then
+                    break
+                end
+
+                const eYMax = buffer.readf32(edgeBuf, eOffset + 4)
+                const eX = buffer.readf32(edgeBuf, eOffset + 8)
+                const eDx = buffer.readf32(edgeBuf, eOffset + 12)
+                const eDir = buffer.readf32(edgeBuf, eOffset + 16)
+
+                const ex0 = eX + (math.max(y, eYMin) - eYMin) * eDx
+                const ex1 = eX + (math.min(y + 1, eYMax) - eYMin) * eDx
+                const ixl = math.clamp(math.floor(math.min(ex0, ex1)), 0, width - 1)
+                const ixr = math.clamp(math.floor(math.max(ex0, ex1)), 0, width - 1)
+
+                if ixl < scanXMin then scanXMin = ixl end
+                if ixr > scanXMax then scanXMax = ixr end
+
+                processEdgeAA(areaBuf, fillBuf, eYMin, eYMax, eX, eDx, eDir, y, width)
+            end
+
+            -- Prefix-sum accumulation: coverage = |area + running_sum|
+            -- Consecutive solid pixels are batched into a single fillInterior call.
+            -- Interior skip: when a solid pixel has zero edge contribution, scan
+            -- forward to find the next edge boundary and fill the gap in one call.
+            if scanXMin > scanXMax then
+                prevXMin = scanXMin
+                prevXMax = scanXMax
+                rowOffset += rowStride
+                continue
+            end
+
+            local sum = 0.0
+            local solidRunStart = -1
+            local px = scanXMin
+
+            while px <= scanXMax do
+                const off = px * 4
+                const area = buffer.readf32(areaBuf, off)
+                const fill = buffer.readf32(fillBuf, off)
+                const coverage = math.min(math.abs(area + sum), 1)
+                sum += fill
+
+                -- Interior skip: solid pixel with no edge contribution means we're
+                -- between edges. Jump to the next edge boundary in one fill call.
+                if coverage >= 1 and area == 0 and fill == 0 then
+                    if solidRunStart < 0 then
+                        solidRunStart = px
+                    end
+
+                    const skipTo = findNextEdge(areaBuf, fillBuf, px + 1, scanXMax)
+                    fillInterior(pixelBuf, rowOffset + solidRunStart * 4, skipTo - solidRunStart, colorU32)
+                    solidRunStart = -1
+                    px = skipTo
+                    continue
+                end
+
+                if coverage >= 1 then
+                    if solidRunStart < 0 then
+                        solidRunStart = px
+                    end
+
+                    px += 1
+                    continue
+                end
+
+                if solidRunStart >= 0 then
+                    fillInterior(pixelBuf, rowOffset + solidRunStart * 4, px - solidRunStart, colorU32)
+                    solidRunStart = -1
+                end
+
+                if coverage > 0 then
+                    const aaAlpha = math.floor(ab * coverage + 0.5)
+                    buffer.writeu32(pixelBuf, rowOffset + off, colorRgb + aaAlpha * 0x1000000)
+                end
+
+                px += 1
+            end
+
+            if solidRunStart >= 0 then
+                fillInterior(pixelBuf, rowOffset + solidRunStart * 4, scanXMax - solidRunStart + 1, colorU32)
+            end
+
+            prevXMin = scanXMin
+            prevXMax = scanXMax
+            rowOffset += rowStride
+        end
+
+    else
+        -- Non-AA: even-odd scanline fill at pixel centers
+        for y = yStart, yEnd do
+            const scanY = y + 0.5
+            local xCount: number
+            firstEdgeOffset, xCount = findIntersections(edgeBuf, edgeEnd, firstEdgeOffset, xBuf, scanY)
+
+            local pair = 0
+            while pair < xCount - 1 do
+                const xLeft = buffer.readf32(xBuf, pair * 4)
+                const xRight = buffer.readf32(xBuf, (pair + 1) * 4)
+                fillSpanSolid(pixelBuf, rowOffset, xLeft, xRight, width, colorU32)
+                pair += 2
+            end
+
+            rowOffset += rowStride
+        end
+    end
+end
+
+return {
+	rasterize = rasterize,
+	fillInterior = fillInterior,
+}

@@ -1,0 +1,42 @@
+# Project place file
+/ui_kit.rbxlx
+
+# Roblox Studio lock files
+/*.rbxlx.lock
+/*.rbxl.lock
+
+/wally.lock
+
+# MacOS file system clutter.
+._*
+.DS_STORE
+
+/*.git
+
+/*.zip
+
+/*.rbxm
+
+sourcemap.json
+
+# supercorner_react
+/supercorner_react/Packages
+
+# supercorner_fusion03
+/supercorner_fusion03/Packages
+
+# IDEs
+.idea/       # JetBrains (CLion, IntelliJ, etc.)
+.vscode/
+.trae/
+.zed/
+*.swp        # Vim swap files
+*.swo        # Vim swap overflow files
+
+# AI agents
+.claude/
+.cursor/
+.aider/
+.copilot/
+.codex/
+.gemini/

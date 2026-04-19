@@ -1,0 +1,7 @@
+{
+    "name": "packages_no_index",
+    "globIgnorePaths": ["Packages/_Index"],
+    "tree": {
+        "$path": "Packages"
+    }
+}

@@ -1,0 +1,23 @@
+{
+    "name": "packages",
+    "tree": {
+        "$className": "Folder",
+        "$path": "packages_no_index.project.json",
+
+        "supercorner-fusion03": {
+            "$path": "supercorner_fusion03_index.luau"
+        },
+
+        "_Index": {
+            "$path": "Packages/_Index",
+
+            "SUPERCORNER_FUSION03": {
+                "$className": "Folder",
+
+                "supercorner-fusion03": {
+                    "$path": "default.project.json"
+                }
+            }
+        }
+    }
+}
