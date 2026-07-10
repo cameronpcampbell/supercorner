@@ -1,8 +1,8 @@
 --!strict
 
-local Fusion =
-	require(script.Parent.Parent.Parent.Parent._Index["elttob_fusion@0.3.0"].fusion)
+local Packages = script.Parent.Parent.Parent
 
+local Fusion = require(Packages["elttob_fusion@0.3.0"].fusion)
 local Peek, Children = Fusion.peek, Fusion.Children
 
 type Scope = Fusion.Scope<typeof(Fusion)>
@@ -53,6 +53,35 @@ local function GetPassthroughProps(props: { [any]: any }, supercornerKeys: { [st
 	return result
 end
 
+local function RenderRoot(
+	scope: Scope,
+	button: boolean?,
+	defaultClass: "Frame" | "ImageLabel",
+	rootProps: { [any]: any }
+): Instance
+	if button == true then
+		rootProps.Text = ""
+		return scope:New("TextButton")(rootProps)
+	end
+
+	if defaultClass == "Frame" then
+		return scope:New("Frame")(rootProps)
+	end
+
+	return scope:New("ImageLabel")(rootProps)
+end
+
+local function CreateContentFrame(scope: Scope, userChildren: Child?): Instance
+	return scope:New("Frame") {
+		Name = "Content",
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, 0, 1, 0),
+		ZIndex = 2,
+
+		[Children] = userChildren,
+	}
+end
+
 local function CreateCornerClip(
 	scope: Scope,
 	radius: UsedAs<number>,
@@ -62,13 +91,13 @@ local function CreateCornerClip(
 ): Instance
 	local fillChildren: { [any]: any } = {
 		UICorner = scope:New("UICorner") {
-			CornerRadius = scope:Computed(function(use)
-				return UDim.new(0, use(radius))
+			CornerRadius = scope:Computed(function(use: Fusion.Use): UDim
+				return UDim.new(0, use<<number>>(radius))
 			end),
 		},
 	}
 
-	local peekedStrokeThickness = Peek(visual.strokeThickness)
+	local peekedStrokeThickness = Peek<<number>>(visual.strokeThickness or 0)
 
 	if (peekedStrokeThickness or 0) > 0 then
 		local strokeChildren: { [any]: any }? = nil
@@ -111,7 +140,9 @@ local function RenderClippedCornersFallback(
 	radii: ResolvedRadii,
 	passthroughProps: { [any]: any },
 	userChildren: Child?,
-	visual: VisualProps
+	visual: VisualProps,
+	button: boolean?,
+	rootChildren: Child?
 ): Instance
 	local rootProps: { [any]: any } = {
 		BackgroundTransparency = 1,
@@ -141,12 +172,9 @@ local function RenderClippedCornersFallback(
 				visual
 			),
 
-			ChildrenFrame = if userChildren then scope:New("Frame") {
-				Size = UDim2.new(1, 0, 1, 0),
-				BackgroundTransparency = 1,
-				ZIndex = 2,
-				[Children] = userChildren,
-			} else nil,
+			Content = CreateContentFrame(scope, userChildren),
+
+			[Children] = rootChildren,
 		},
 	}
 
@@ -154,7 +182,7 @@ local function RenderClippedCornersFallback(
 		rootProps[key] = value
 	end
 
-	return scope:New("ImageLabel")(rootProps)
+	return RenderRoot(scope, button, "ImageLabel", rootProps)
 end
 
 local function RenderFallback(
@@ -162,34 +190,36 @@ local function RenderFallback(
 	radii: ResolvedRadii,
 	passthroughProps: { [any]: any },
 	userChildren: Child?,
-	visual: VisualProps
+	visual: VisualProps,
+	button: boolean?,
+	rootChildren: Child?
 ): Instance
-	local needsStroke = scope:Computed(function(use)
-		return (use(visual.strokeThickness) or 0) > 0
+	local needsStroke = scope:Computed(function(use: Fusion.Use): boolean
+		return use<<number>>(visual.strokeThickness or 0) > 0
 	end)
 
 	if UICORNER_HAS_INDIVIDUAL_RADII then
 		local allChildren: { [any]: any } = {
 			UICorner = scope:New("UICorner") {
-				TopLeftRadius = scope:Computed(function(use)
-					return UDim.new(0, use(radii.topLeft))
+				TopLeftRadius = scope:Computed(function(use: Fusion.Use): UDim
+					return UDim.new(0, use<<number>>(radii.topLeft))
 				end),
 
-				TopRightRadius = scope:Computed(function(use)
-					return UDim.new(0, use(radii.topRight))
+				TopRightRadius = scope:Computed(function(use: Fusion.Use): UDim
+					return UDim.new(0, use<<number>>(radii.topRight))
 				end),
 
-				BottomRightRadius = scope:Computed(function(use)
-					return UDim.new(0, use(radii.bottomRight))
+				BottomRightRadius = scope:Computed(function(use: Fusion.Use): UDim
+					return UDim.new(0, use<<number>>(radii.bottomRight))
 				end),
 
-				BottomLeftRadius = scope:Computed(function(use)
-					return UDim.new(0, use(radii.bottomLeft))
+				BottomLeftRadius = scope:Computed(function(use: Fusion.Use): UDim
+					return UDim.new(0, use<<number>>(radii.bottomLeft))
 				end),
 			},
 
-			UIStroke = scope:Computed(function(use, innerScope: Fusion.Scope): Instance?
-				if not use(needsStroke) then return nil end
+			UIStroke = scope:Computed(function(use: Fusion.Use, innerScope: Fusion.Scope): Instance?
+				if not use<<boolean>>(needsStroke) then return nil end
 
 				local strokeChildren: { [any]: any }? = nil
 
@@ -207,12 +237,9 @@ local function RenderFallback(
 				}
 			end),
 
-			ChildrenFrame = if userChildren then scope:New("Frame") {
-				Size = UDim2.new(1, 0, 1, 0),
-				BackgroundTransparency = 1,
-				ZIndex = 2,
-				[Children] = userChildren,
-			} else nil,
+			Content = CreateContentFrame(scope, userChildren),
+
+			[Children] = rootChildren,
 		}
 
 		local rootProps: { [any]: any } = {
@@ -225,16 +252,18 @@ local function RenderFallback(
 			rootProps[key] = value
 		end
 
-		return scope:New("ImageLabel")(rootProps)
+		return RenderRoot(scope, button, "ImageLabel", rootProps)
 
 	else
-		return RenderClippedCornersFallback(scope, radii, passthroughProps, userChildren, visual)
+		return RenderClippedCornersFallback(scope, radii, passthroughProps, userChildren, visual, button, rootChildren)
 	end
 end
 
 return {
 	NON_PASSTHROUGH_KEYS = NON_PASSTHROUGH_KEYS,
 	UICORNER_HAS_INDIVIDUAL_RADII = UICORNER_HAS_INDIVIDUAL_RADII,
+	CreateContentFrame = CreateContentFrame,
 	GetPassthroughProps = GetPassthroughProps,
+	RenderRoot = RenderRoot,
 	RenderFallback = RenderFallback,
 }

@@ -1,13 +1,12 @@
 --!strict
 
-local Fusion =
-	require(script.Parent.Parent.Parent.Parent._Index["elttob_fusion@0.3.0"].fusion)
-local Supercorner =
-	require(script.Parent.Parent.Parent.Parent._Index["cameronpcampbell_supercorner@0.1.0"].supercorner)
+local Packages = script.Parent.Parent.Parent
+local Supercorner = require(Packages["cameronpcampbell_supercorner@0.1.0"].supercorner)
+
+local Fusion = require(Packages["elttob_fusion@0.3.0"].fusion)
+local Peek, Children = Fusion.peek, Fusion.Children
 
 local Shared = require(script.Parent.shared)
-
-local Peek, Children = Fusion.peek, Fusion.Children
 
 type Scope = Fusion.Scope<typeof(Fusion)>
 type UsedAs<T> = Fusion.UsedAs<T>
@@ -15,6 +14,8 @@ type Child = Fusion.Child
 
 const ATLAS_KEYS = {
 	Start = true, End = true, Keypoints = true, Alpha = true,
+	Button = true,
+	RootChildren = true,
 	PreserveSmoothing = true, AntiAlias = true,
 	StrokeThickness = true, StrokeColor = true,
 	StrokeTransparency = true, StrokeGradient = true,
@@ -41,6 +42,8 @@ local function AtlasFusion(
 		End: Supercorner.CreateAtlasParams,
 		Keypoints: number,
 		Alpha: UsedAs<number>,
+		Button: boolean?,
+		RootChildren: Child?,
 		PreserveSmoothing: boolean?,
 		AntiAlias: boolean?,
 		BackgroundColor3: UsedAs<Color3>?,
@@ -54,6 +57,7 @@ local function AtlasFusion(
 ): Instance
 	local passthroughProps = Shared.GetPassthroughProps(props, ATLAS_KEYS)
 	local userChildren: Child? = props[Children]
+	local userRootChildren: Child? = props.RootChildren
 	local peekedStrokeThickness = props.StrokeThickness or 0
 
 	-- Create atlases
@@ -95,22 +99,27 @@ local function AtlasFusion(
 		local endTR = props.End.TopRightRadius or endDefault
 		local endBR = props.End.BottomRightRadius or endDefault
 		local endBL = props.End.BottomLeftRadius or endDefault
+		local strokeGradient: Instance? = nil
+
+		if props.StrokeGradient ~= nil then
+			strokeGradient = Peek<<Instance>>(props.StrokeGradient)
+		end
 
 		return Shared.RenderFallback(scope, {
-			topLeft = scope:Computed(function(use)
-				return Lerp(startTL, endTL, use(props.Alpha) or 0)
+			topLeft = scope:Computed(function(use: Fusion.Use): number
+				return Lerp(startTL, endTL, use<<number>>(props.Alpha))
 			end),
 
-			topRight = scope:Computed(function(use)
-				return Lerp(startTR, endTR, use(props.Alpha) or 0)
+			topRight = scope:Computed(function(use: Fusion.Use): number
+				return Lerp(startTR, endTR, use<<number>>(props.Alpha))
 			end),
 
-			bottomRight = scope:Computed(function(use)
-				return Lerp(startBR, endBR, use(props.Alpha) or 0)
+			bottomRight = scope:Computed(function(use: Fusion.Use): number
+				return Lerp(startBR, endBR, use<<number>>(props.Alpha))
 			end),
 
-			bottomLeft = scope:Computed(function(use)
-				return Lerp(startBL, endBL, use(props.Alpha) or 0)
+			bottomLeft = scope:Computed(function(use: Fusion.Use): number
+				return Lerp(startBL, endBL, use<<number>>(props.Alpha))
 			end),
 		}, passthroughProps, userChildren, {
 			bgColor = props.BackgroundColor3,
@@ -118,8 +127,8 @@ local function AtlasFusion(
 			strokeThickness = peekedStrokeThickness,
 			strokeColor = props.StrokeColor,
 			strokeTransparency = props.StrokeTransparency,
-			strokeGradient = Peek(props.StrokeGradient),
-		})
+			strokeGradient = strokeGradient,
+		}, props.Button, userRootChildren)
 	end
 
 	-- State values for fill keypoint
@@ -158,12 +167,12 @@ local function AtlasFusion(
 	end
 
 	-- Initial update
-	UpdateFromAlpha(Peek(props.Alpha) or 0)
+	UpdateFromAlpha(Peek<<number>>(props.Alpha))
 
 	-- Alpha observer (only if Alpha is a state object)
 	if typeof(props.Alpha) == "table" then
 		scope:Observer(props.Alpha):onChange(function()
-			UpdateFromAlpha(Peek(props.Alpha) or 0)
+			UpdateFromAlpha(Peek<<number>>(props.Alpha))
 		end)
 	end
 
@@ -175,6 +184,7 @@ local function AtlasFusion(
 
 	-- Build instance tree
 	local fillChild = scope:New("ImageLabel") {
+		Name = "Fill",
 		ImageContent = fillContent,
 		ImageRectOffset = fillImageRectOffsetState,
 		ImageRectSize = fillImageRectSizeState,
@@ -185,6 +195,7 @@ local function AtlasFusion(
 		ImageColor3 = props.BackgroundColor3,
 		ImageTransparency = props.BackgroundTransparency,
 		Size = UDim2.new(1, 0, 1, 0),
+		ZIndex = 1,
 	}
 
 	local strokeChild: Instance? = nil
@@ -197,6 +208,7 @@ local function AtlasFusion(
 		end
 
 		strokeChild = scope:New("ImageLabel") {
+			Name = "Stroke",
 			ImageContent = strokeContent,
 			ImageRectOffset = strokeImageRectOffsetState,
 			ImageRectSize = strokeImageRectSizeState,
@@ -207,23 +219,27 @@ local function AtlasFusion(
 			ImageColor3 = props.StrokeColor,
 			ImageTransparency = props.StrokeTransparency,
 			Size = UDim2.new(1, 0, 1, 0),
+			ZIndex = 3,
 			[Children] = strokeChildren,
 		}
 	end
 
-	local rootChildren: { any } = {
-		fillChild,
-		strokeChild,
+	local imageFolder = scope:New("Folder") {
+		Name = "SupercornerImages",
+
+		[Children] = ({
+			fillChild,
+			strokeChild,
+		} :: { [any]: any }),
 	}
 
-	if userChildren then
-		table.insert(rootChildren, scope:New("Frame") {
-			Size = UDim2.new(1, 0, 1, 0),
-			BackgroundTransparency = 1,
-			ZIndex = 2,
-			[Children] = userChildren,
-		})
-	end
+	local contentFrame = Shared.CreateContentFrame(scope, userChildren)
+
+	local rootChildren: { [any]: any } = {
+		imageFolder,
+		contentFrame,
+		[Children] = userRootChildren,
+	}
 
 	local rootProps: { [any]: any } = {
 		BackgroundTransparency = 1,
@@ -234,7 +250,7 @@ local function AtlasFusion(
 		rootProps[key] = value
 	end
 
-	return scope:New("Frame")(rootProps)
+	return Shared.RenderRoot(scope, props.Button, "Frame", rootProps)
 end
 
 return AtlasFusion
