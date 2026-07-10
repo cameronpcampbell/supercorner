@@ -203,7 +203,25 @@ jobs:
           pesde auth whoami
 
       - name: Publish package
-        run: pesde publish --yes
+        run: |
+          PUBLISH_LOG="$RUNNER_TEMP/pesde-publish.log"
+          set -o pipefail
+
+          if pesde publish --yes 2>&1 | tee "$PUBLISH_LOG"; then
+            PUBLISH_STATUS=0
+          else
+            PUBLISH_STATUS=$?
+          fi
+
+          if [ "$PUBLISH_STATUS" -ne 0 ]; then
+            echo "::error::pesde publish exited with status $PUBLISH_STATUS."
+            exit "$PUBLISH_STATUS"
+          fi
+
+          if grep -Fq "error occurred publishing" "$PUBLISH_LOG"; then
+            echo "::error::pesde reported a publishing error but returned exit code 0."
+            exit 1
+          fi
 
   publish-release:
     name: Publish GitHub Release
