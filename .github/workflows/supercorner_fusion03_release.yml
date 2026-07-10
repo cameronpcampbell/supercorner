@@ -275,6 +275,9 @@ jobs:
           fi
           printf '%s\n' "$ACTUAL_VERSION"
 
+      - name: Verify locked install
+        run: pesde install --locked
+
       - name: Authenticate with pesde
         env:
           PESDE_TOKEN: ${{ secrets.PESDE_TOKEN }}
