@@ -4,11 +4,17 @@ A Fusion 0.3 wrapper for [Supercorner](https://github.com/cameronpcampbell/super
 
 ## Installation
 
-Add to your `wally.toml`:
+Install the Roblox package with Pesde:
+
+```sh
+pesde add cameronpcampbell/supercorner_fusion03@0.1.1 -t roblox
+```
+
+Or add it directly to `pesde.toml`:
 
 ```toml
 [dependencies]
-supercorner-fusion03 = "cameronpcampbell/supercorner-fusion03@{version}"
+supercorner_fusion03 = { name = "cameronpcampbell/supercorner_fusion03", version = "^0.1.1", target = "roblox" }
 ```
 
 ## Usage

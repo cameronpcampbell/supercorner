@@ -1,7 +1,8 @@
 --!strict
 
-local Fusion = require(script.Packages.fusion)
-local Supercorner = require(script.Packages["supercorner-fusion03"])
+local Packages = script.Packages
+local Fusion = require(Packages.roblox_packages.fusion)
+local Supercorner = require(Packages.supercorner_fusion03)
 
 local Players = game:GetService("Players")
 

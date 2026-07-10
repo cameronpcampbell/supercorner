@@ -1,8 +1,8 @@
 --!strict
 
-local Packages = script.Parent.Parent.Parent
+local Packages = script.Parent.Parent.roblox_packages
 
-local Fusion = require(Packages["elttob_fusion@0.3.0"].fusion)
+local Fusion = require(Packages.fusion)
 local Peek, Children = Fusion.peek, Fusion.Children
 
 type Scope = Fusion.Scope<typeof(Fusion)>
@@ -25,12 +25,12 @@ export type VisualProps = {
 	strokeGradient: Instance?,
 }
 
-const NON_PASSTHROUGH_KEYS = {
+local NON_PASSTHROUGH_KEYS = {
 	BackgroundColor3 = true,
 	BackgroundTransparency = true,
 }
 
-const UICORNER_HAS_INDIVIDUAL_RADII = (function()
+local UICORNER_HAS_INDIVIDUAL_RADII = (function()
 	local reflectionService = game:GetService("ReflectionService")
 	local reflection: { [any]: any } = reflectionService:GetPropertiesOfClass("UICorner")
 
@@ -92,12 +92,12 @@ local function CreateCornerClip(
 	local fillChildren: { [any]: any } = {
 		UICorner = scope:New("UICorner") {
 			CornerRadius = scope:Computed(function(use: Fusion.Use): UDim
-				return UDim.new(0, use<<number>>(radius))
+				return UDim.new(0, use<<number>>(radius) :: number)
 			end),
 		},
 	}
 
-	local peekedStrokeThickness = Peek<<number>>(visual.strokeThickness or 0)
+	local peekedStrokeThickness = Peek<<number>>(visual.strokeThickness or 0) :: number
 
 	if (peekedStrokeThickness or 0) > 0 then
 		local strokeChildren: { [any]: any }? = nil
@@ -195,31 +195,31 @@ local function RenderFallback(
 	rootChildren: Child?
 ): Instance
 	local needsStroke = scope:Computed(function(use: Fusion.Use): boolean
-		return use<<number>>(visual.strokeThickness or 0) > 0
+		return (use<<number>>(visual.strokeThickness or 0) :: number) > 0
 	end)
 
 	if UICORNER_HAS_INDIVIDUAL_RADII then
 		local allChildren: { [any]: any } = {
 			UICorner = scope:New("UICorner") {
 				TopLeftRadius = scope:Computed(function(use: Fusion.Use): UDim
-					return UDim.new(0, use<<number>>(radii.topLeft))
+					return UDim.new(0, use<<number>>(radii.topLeft) :: number)
 				end),
 
 				TopRightRadius = scope:Computed(function(use: Fusion.Use): UDim
-					return UDim.new(0, use<<number>>(radii.topRight))
+					return UDim.new(0, use<<number>>(radii.topRight) :: number)
 				end),
 
 				BottomRightRadius = scope:Computed(function(use: Fusion.Use): UDim
-					return UDim.new(0, use<<number>>(radii.bottomRight))
+					return UDim.new(0, use<<number>>(radii.bottomRight) :: number)
 				end),
 
 				BottomLeftRadius = scope:Computed(function(use: Fusion.Use): UDim
-					return UDim.new(0, use<<number>>(radii.bottomLeft))
+					return UDim.new(0, use<<number>>(radii.bottomLeft) :: number)
 				end),
 			},
 
 			UIStroke = scope:Computed(function(use: Fusion.Use, innerScope: Fusion.Scope): Instance?
-				if not use<<boolean>>(needsStroke) then return nil end
+				if not (use<<boolean>>(needsStroke) :: boolean) then return nil end
 
 				local strokeChildren: { [any]: any }? = nil
 

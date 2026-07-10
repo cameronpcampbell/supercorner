@@ -1,9 +1,8 @@
 --!strict
 
-local Packages = script.Parent.Parent
-local Supercorner = require(Packages["cameronpcampbell_supercorner@0.1.0"].supercorner)
-
-local Fusion = require(Packages["elttob_fusion@0.3.0"].fusion)
+local Packages = script.Parent.roblox_packages
+local Supercorner = require(Packages.supercorner)
+local Fusion = require(Packages.fusion)
 local Peek, Children = Fusion.peek, Fusion.Children
 
 local Shared = require(script.shared)
@@ -24,9 +23,9 @@ type Geometry = {
 	StrokeThickness: number?,
 }
 
-const CREATE_ONLY_PROPS = { "MaxCornerRadius", "MaxTopLeftRadius", "MaxTopRightRadius", "MaxBottomRightRadius", "MaxBottomLeftRadius", "Redrawable" }
+local CREATE_ONLY_PROPS = { "MaxCornerRadius", "MaxTopLeftRadius", "MaxTopRightRadius", "MaxBottomRightRadius", "MaxBottomLeftRadius", "Redrawable" }
 
-const SUPERCORNER_KEYS = {
+local SUPERCORNER_KEYS = {
 	CornerRadius = true, CornerSmoothing = true,
 	TopLeftRadius = true, TopRightRadius = true,
 	BottomRightRadius = true, BottomLeftRadius = true,
@@ -42,20 +41,20 @@ const SUPERCORNER_KEYS = {
 
 local function TryCreateSupercorner(props: { [any]: any }, stroke: number): Supercorner.Supercorner?
 	local _ok, supercorner = pcall(Supercorner.new, {
-		CornerRadius = Peek(props.CornerRadius),
-		CornerSmoothing = Peek(props.CornerSmoothing),
-		TopLeftRadius = Peek(props.TopLeftRadius),
-		TopRightRadius = Peek(props.TopRightRadius),
-		BottomRightRadius = Peek(props.BottomRightRadius),
-		BottomLeftRadius = Peek(props.BottomLeftRadius),
-		MaxCornerRadius = Peek(props.MaxCornerRadius),
-		MaxTopLeftRadius = Peek(props.MaxTopLeftRadius),
-		MaxTopRightRadius = Peek(props.MaxTopRightRadius),
-		MaxBottomRightRadius = Peek(props.MaxBottomRightRadius),
-		MaxBottomLeftRadius = Peek(props.MaxBottomLeftRadius),
-		PreserveSmoothing = Peek(props.PreserveSmoothing),
-		AntiAlias = Peek(props.AntiAlias),
-		Redrawable = Peek(props.Redrawable),
+		CornerRadius = Peek<<number?>>(props.CornerRadius),
+		CornerSmoothing = Peek<<number?>>(props.CornerSmoothing),
+		TopLeftRadius = Peek<<number?>>(props.TopLeftRadius),
+		TopRightRadius = Peek<<number?>>(props.TopRightRadius),
+		BottomRightRadius = Peek<<number?>>(props.BottomRightRadius),
+		BottomLeftRadius = Peek<<number?>>(props.BottomLeftRadius),
+		MaxCornerRadius = Peek<<number?>>(props.MaxCornerRadius),
+		MaxTopLeftRadius = Peek<<number?>>(props.MaxTopLeftRadius),
+		MaxTopRightRadius = Peek<<number?>>(props.MaxTopRightRadius),
+		MaxBottomRightRadius = Peek<<number?>>(props.MaxBottomRightRadius),
+		MaxBottomLeftRadius = Peek<<number?>>(props.MaxBottomLeftRadius),
+		PreserveSmoothing = Peek<<boolean?>>(props.PreserveSmoothing),
+		AntiAlias = Peek<<boolean?>>(props.AntiAlias),
+		Redrawable = Peek<<boolean?>>(props.Redrawable),
 		Stroke = stroke,
 	})
 
@@ -116,10 +115,10 @@ local function SupercornerFusion(
 		if propValue == nil then continue end
 		if typeof(propValue) ~= "table" then continue end
 
-		local initial = Peek(propValue)
+		local initial = Peek<<number | boolean>>(propValue)
 
 		scope:Observer(propValue):onChange(function()
-			if Peek(propValue) ~= initial then
+			if Peek<<number | boolean>>(propValue) ~= initial then
 				warn(`[Supercorner Fusion] '{propName}' cannot be updated after creation.`)
 			end
 		end)
@@ -127,24 +126,24 @@ local function SupercornerFusion(
 
 	-- Derived state
 	local computeNeedsFill = scope:Computed(function(use: Fusion.Use): boolean
-		return use<<number>>(props.BackgroundTransparency or 0) ~= 1
+		return (use<<number>>(props.BackgroundTransparency or 0) :: number) ~= 1
 	end)
 
 	local computeNeedsStroke = scope:Computed(function(use: Fusion.Use): boolean
-		return use<<number>>(props.StrokeThickness or 0) > 0
+		return (use<<number>>(props.StrokeThickness or 0) :: number) > 0
 	end)
 
 	local computeGeometry = scope:Computed(function(use: Fusion.Use): Geometry
 		return {
-			CornerRadius = if props.CornerRadius == nil then nil else use<<number>>(props.CornerRadius),
-			CornerSmoothing = if props.CornerSmoothing == nil then nil else use<<number>>(props.CornerSmoothing),
-			TopLeftRadius = if props.TopLeftRadius == nil then nil else use<<number>>(props.TopLeftRadius),
-			TopRightRadius = if props.TopRightRadius == nil then nil else use<<number>>(props.TopRightRadius),
-			BottomRightRadius = if props.BottomRightRadius == nil then nil else use<<number>>(props.BottomRightRadius),
-			BottomLeftRadius = if props.BottomLeftRadius == nil then nil else use<<number>>(props.BottomLeftRadius),
-			PreserveSmoothing = if props.PreserveSmoothing == nil then nil else use<<boolean>>(props.PreserveSmoothing),
-			AntiAlias = if props.AntiAlias == nil then nil else use<<boolean>>(props.AntiAlias),
-			StrokeThickness = if props.StrokeThickness == nil then nil else use<<number>>(props.StrokeThickness),
+			CornerRadius = if props.CornerRadius == nil then nil else (use<<number>>(props.CornerRadius) :: number),
+			CornerSmoothing = if props.CornerSmoothing == nil then nil else (use<<number>>(props.CornerSmoothing) :: number),
+			TopLeftRadius = if props.TopLeftRadius == nil then nil else (use<<number>>(props.TopLeftRadius) :: number),
+			TopRightRadius = if props.TopRightRadius == nil then nil else (use<<number>>(props.TopRightRadius) :: number),
+			BottomRightRadius = if props.BottomRightRadius == nil then nil else (use<<number>>(props.BottomRightRadius) :: number),
+			BottomLeftRadius = if props.BottomLeftRadius == nil then nil else (use<<number>>(props.BottomLeftRadius) :: number),
+			PreserveSmoothing = if props.PreserveSmoothing == nil then nil else (use<<boolean>>(props.PreserveSmoothing) :: boolean),
+			AntiAlias = if props.AntiAlias == nil then nil else (use<<boolean>>(props.AntiAlias) :: boolean),
+			StrokeThickness = if props.StrokeThickness == nil then nil else (use<<number>>(props.StrokeThickness) :: number),
 		}
 	end)
 
@@ -163,7 +162,7 @@ local function SupercornerFusion(
 	-- Initial creation
 	local useFallback = false
 
-	if Peek<<boolean>>(computeNeedsFill) then
+	if (Peek<<boolean>>(computeNeedsFill) :: boolean) then
 		fillSC = TryCreateSupercorner(props, 0)
 
 		if fillSC then
@@ -173,8 +172,8 @@ local function SupercornerFusion(
 		end
 	end
 
-	if Peek<<boolean>>(computeNeedsStroke) and not useFallback then
-		local peekedStrokeThickness = Peek<<number>>(props.StrokeThickness or 0)
+	if (Peek<<boolean>>(computeNeedsStroke) :: boolean) and not useFallback then
+		local peekedStrokeThickness = Peek<<number>>(props.StrokeThickness or 0) :: number
 		strokeSC = TryCreateSupercorner(props, peekedStrokeThickness)
 
 		if strokeSC then
@@ -191,29 +190,29 @@ local function SupercornerFusion(
 
 	if useFallback then
 		local defaultRadius = scope:Computed(function(use: Fusion.Use): number
-			return use<<number>>(props.CornerRadius or 0)
+			return use<<number>>(props.CornerRadius or 0) :: number
 		end)
 		local strokeGradient: Instance? = nil
 
 		if props.StrokeGradient ~= nil then
-			strokeGradient = Peek<<Instance>>(props.StrokeGradient)
+			strokeGradient = Peek<<Instance>>(props.StrokeGradient) :: Instance
 		end
 
 		return Shared.RenderFallback(scope, {
 			topLeft = scope:Computed(function(use: Fusion.Use): number
-				return use<<number>>(props.TopLeftRadius or defaultRadius)
+				return use<<number>>(props.TopLeftRadius or defaultRadius) :: number
 			end),
 
 			topRight = scope:Computed(function(use: Fusion.Use): number
-				return use<<number>>(props.TopRightRadius or defaultRadius)
+				return use<<number>>(props.TopRightRadius or defaultRadius) :: number
 			end),
 
 			bottomRight = scope:Computed(function(use: Fusion.Use): number
-				return use<<number>>(props.BottomRightRadius or defaultRadius)
+				return use<<number>>(props.BottomRightRadius or defaultRadius) :: number
 			end),
 
 			bottomLeft = scope:Computed(function(use: Fusion.Use): number
-				return use<<number>>(props.BottomLeftRadius or defaultRadius)
+				return use<<number>>(props.BottomLeftRadius or defaultRadius) :: number
 			end),
 		}, passthroughProps, userChildren, {
 			bgColor = props.BackgroundColor3,
@@ -227,7 +226,7 @@ local function SupercornerFusion(
 
 	-- Geometry change observer — redraw on prop changes
 	scope:Observer(computeGeometry):onChange(function()
-		local geo = Peek<<Geometry>>(computeGeometry)
+		local geo = Peek<<Geometry>>(computeGeometry) :: Geometry
 
 		if fillSC then
 			local ok, err = (pcall :: any)(fillSC.Redraw, fillSC, {
@@ -271,7 +270,7 @@ local function SupercornerFusion(
 
 	-- Fill toggle observer
 	scope:Observer(computeNeedsFill):onChange(function()
-		local peekedNeedsFill = Peek<<boolean>>(computeNeedsFill)
+		local peekedNeedsFill = Peek<<boolean>>(computeNeedsFill) :: boolean
 
 		if peekedNeedsFill and not fillSC then
 			local newFillSC = TryCreateSupercorner(props, 0)
@@ -290,10 +289,10 @@ local function SupercornerFusion(
 
 	-- Stroke toggle observer
 	scope:Observer(computeNeedsStroke):onChange(function()
-		local peekedNeedsStroke = Peek<<boolean>>(computeNeedsStroke)
+		local peekedNeedsStroke = Peek<<boolean>>(computeNeedsStroke) :: boolean
 
 		if peekedNeedsStroke and not strokeSC then
-			local peekedStrokeThickness = Peek<<number>>(props.StrokeThickness or 0)
+			local peekedStrokeThickness = Peek<<number>>(props.StrokeThickness or 0) :: number
 			local newStrokeSC = TryCreateSupercorner(props, peekedStrokeThickness)
 			strokeSC = newStrokeSC
 
@@ -316,7 +315,7 @@ local function SupercornerFusion(
 
 	-- Build instance tree
 	local computeFillChild = scope:Computed(function(use, innerScope: Fusion.Scope): Instance?
-		local usedContent = use(fillContentState)
+		local usedContent = use<<Content?>>(fillContentState)
 		if usedContent == nil then return nil end
 
 		return innerScope:New("ImageLabel") {
@@ -334,7 +333,7 @@ local function SupercornerFusion(
 	end)
 
 	local computeStrokeChild = scope:Computed(function(use, innerScope: Fusion.Scope): Instance?
-		local usedContent = use(strokeContentState)
+		local usedContent = use<<Content?>>(strokeContentState)
 		if usedContent == nil then return nil end
 
 		local strokeChildren: { [any]: any }? = nil

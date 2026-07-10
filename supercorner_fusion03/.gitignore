@@ -1,0 +1,10 @@
+/.pesde/
+/default.project.json
+/luau_packages/
+/lune_packages/
+/roblox_packages/
+/package.tar.gz
+
+# MacOS file system clutter.
+._*
+.DS_STORE

@@ -3,7 +3,8 @@
 - Added `RootChildren` for mounting children directly under the generated root; regular Fusion children now live in a named `Content` layer.
 - Standardized the generated hierarchy with named `SupercornerImages`, `Fill`, `Stroke`, and `Content` instances and explicit Z-index ordering.
 - Fixed reactive fill and stroke toggling so regenerated image content and slice metadata are applied correctly.
-- Fixed Wally dependency resolution and bundled the MIT license as a regular package file.
+- Migrated distribution to Pesde under the package name `cameronpcampbell/supercorner_fusion03`, with native Pesde Supercorner resolution and Fusion pinned to its upstream 0.3 commit.
+- Bundled the MIT license as a regular package file.
 
 # v0.1.0
 - Added `atlas` support via `Supercorner.atlas(scope, props)` for pre-baked keypoint animations driven by a reactive `Alpha` value.

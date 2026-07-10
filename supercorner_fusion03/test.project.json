@@ -9,7 +9,15 @@
                     "$path": "test/test_atlas.client.luau",
 
                     "Packages": {
-                        "$path": "packages.project.json"
+                        "$className": "Folder",
+
+                        "supercorner_fusion03": {
+                            "$path": "src"
+                        },
+
+                        "roblox_packages": {
+                            "$path": "roblox_packages"
+                        }
                     }
                 }
             }

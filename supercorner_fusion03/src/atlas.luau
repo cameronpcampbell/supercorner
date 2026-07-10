@@ -1,9 +1,9 @@
 --!strict
 
-local Packages = script.Parent.Parent.Parent
-local Supercorner = require(Packages["cameronpcampbell_supercorner@0.1.0"].supercorner)
+local Packages = script.Parent.Parent.roblox_packages
+local Supercorner = require(Packages.supercorner)
 
-local Fusion = require(Packages["elttob_fusion@0.3.0"].fusion)
+local Fusion = require(Packages.fusion)
 local Peek, Children = Fusion.peek, Fusion.Children
 
 local Shared = require(script.Parent.shared)
@@ -12,7 +12,7 @@ type Scope = Fusion.Scope<typeof(Fusion)>
 type UsedAs<T> = Fusion.UsedAs<T>
 type Child = Fusion.Child
 
-const ATLAS_KEYS = {
+local ATLAS_KEYS = {
 	Start = true, End = true, Keypoints = true, Alpha = true,
 	Button = true,
 	RootChildren = true,
@@ -102,24 +102,24 @@ local function AtlasFusion(
 		local strokeGradient: Instance? = nil
 
 		if props.StrokeGradient ~= nil then
-			strokeGradient = Peek<<Instance>>(props.StrokeGradient)
+			strokeGradient = Peek<<Instance>>(props.StrokeGradient) :: Instance
 		end
 
 		return Shared.RenderFallback(scope, {
 			topLeft = scope:Computed(function(use: Fusion.Use): number
-				return Lerp(startTL, endTL, use<<number>>(props.Alpha))
+				return Lerp(startTL, endTL, use<<number>>(props.Alpha) :: number)
 			end),
 
 			topRight = scope:Computed(function(use: Fusion.Use): number
-				return Lerp(startTR, endTR, use<<number>>(props.Alpha))
+				return Lerp(startTR, endTR, use<<number>>(props.Alpha) :: number)
 			end),
 
 			bottomRight = scope:Computed(function(use: Fusion.Use): number
-				return Lerp(startBR, endBR, use<<number>>(props.Alpha))
+				return Lerp(startBR, endBR, use<<number>>(props.Alpha) :: number)
 			end),
 
 			bottomLeft = scope:Computed(function(use: Fusion.Use): number
-				return Lerp(startBL, endBL, use<<number>>(props.Alpha))
+				return Lerp(startBL, endBL, use<<number>>(props.Alpha) :: number)
 			end),
 		}, passthroughProps, userChildren, {
 			bgColor = props.BackgroundColor3,
@@ -167,12 +167,12 @@ local function AtlasFusion(
 	end
 
 	-- Initial update
-	UpdateFromAlpha(Peek<<number>>(props.Alpha))
+	UpdateFromAlpha(Peek<<number>>(props.Alpha) :: number)
 
 	-- Alpha observer (only if Alpha is a state object)
 	if typeof(props.Alpha) == "table" then
 		scope:Observer(props.Alpha):onChange(function()
-			UpdateFromAlpha(Peek<<number>>(props.Alpha))
+			UpdateFromAlpha(Peek<<number>>(props.Alpha) :: number)
 		end)
 	end
 
