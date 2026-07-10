@@ -23,6 +23,11 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Install Rokit toolchain
+        uses: CompeyDev/setup-rokit@v0.1.2
+        with:
+          path: supercorner_fusion03
+
       - name: Install pesde
         env:
           GH_TOKEN: ${{ github.token }}
@@ -59,6 +64,15 @@ jobs:
           fi
           printf '%s\n' "$ACTUAL_VERSION"
 
+      - name: Verify script runtime
+        run: |
+          ACTUAL_LUNE="$(lune --version)"
+          if [ "$ACTUAL_LUNE" != "lune 0.10.4" ]; then
+            echo "::error::Expected lune 0.10.4, got $ACTUAL_LUNE."
+            exit 1
+          fi
+          printf '%s\n' "$ACTUAL_LUNE"
+
       - name: Check pesde.toml version matches tag
         run: |
           TAG="${{ github.ref_name }}"
@@ -81,12 +95,41 @@ jobs:
       - name: Verify locked install
         run: pesde install --locked
 
+      - name: Validate Luau sources
+        run: |
+          ROBLOX_TYPES="$RUNNER_TEMP/globalTypes.PluginSecurity.d.luau"
+          SOURCEMAP="$RUNNER_TEMP/supercorner-fusion03-sourcemap.json"
+          ACTUAL_LUAU_LSP="$(luau-lsp --version)"
+
+          if [ "$ACTUAL_LUAU_LSP" != "1.68.1" ]; then
+            echo "::error::Expected luau-lsp 1.68.1, got $ACTUAL_LUAU_LSP."
+            exit 1
+          fi
+          printf 'luau-lsp %s\n' "$ACTUAL_LUAU_LSP"
+
+          curl --proto '=https' --tlsv1.2 --fail --silent --show-error --location \
+            https://luau-lsp.pages.dev/type-definitions/globalTypes.PluginSecurity.d.luau \
+            --output "$ROBLOX_TYPES"
+
+          rojo sourcemap test.project.json \
+            --output "$SOURCEMAP" \
+            --include-non-scripts
+
+          luau-lsp analyze \
+            --platform=roblox \
+            --definitions="$ROBLOX_TYPES" \
+            --sourcemap="$SOURCEMAP" \
+            --ignore='roblox_packages/**' \
+            src/init.luau \
+            src/atlas.luau \
+            src/shared.luau
+
       - name: Build and inspect package archive
         run: |
           PUBLISH_LOG="$RUNNER_TEMP/pesde-publish-dry-run.log"
           set -o pipefail
 
-          if pesde publish --dry-run --yes 2>&1 | tee "$PUBLISH_LOG"; then
+          if pesde publish --dry-run --yes --no-verify 2>&1 | tee "$PUBLISH_LOG"; then
             PUBLISH_STATUS=0
           else
             PUBLISH_STATUS=$?
@@ -191,6 +234,11 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Install Rokit toolchain
+        uses: CompeyDev/setup-rokit@v0.1.2
+        with:
+          path: supercorner_fusion03
+
       - name: Install pesde
         env:
           GH_TOKEN: ${{ github.token }}
@@ -244,7 +292,7 @@ jobs:
           PUBLISH_LOG="$RUNNER_TEMP/pesde-publish.log"
           set -o pipefail
 
-          if pesde publish --yes 2>&1 | tee "$PUBLISH_LOG"; then
+          if pesde publish --yes --no-verify 2>&1 | tee "$PUBLISH_LOG"; then
             PUBLISH_STATUS=0
           else
             PUBLISH_STATUS=$?

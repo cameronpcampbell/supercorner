@@ -4,3 +4,4 @@
 rojo = "rojo-rbx/rojo@7.6.1"
 pesde = "pesde-pkg/pesde@0.7.3+registry.0.2.3"
 lune = "lune-org/lune@0.10.4"
+luau-lsp = "JohnnyMorganz/luau-lsp@1.68.1"
