@@ -59,12 +59,14 @@ type CacheEntry = {
 	state: SupercornerState,
 	refCount: number,
 	key: string,
+	deleteTask: thread?,
 }
 
 type StaticCacheEntry = {
 	content: Content,
 	refCount: number,
 	key: string,
+	deleteTask: thread?,
 }
 
 type CreateDataModelContentAsync =
@@ -84,6 +86,96 @@ const StaticCache: { [string]: StaticCacheEntry } = {}
 local cacheCount = 0
 local staticCacheCount = 0
 const CacheKeyBuf = buffer.create(74)
+const CACHE_DELETE_DELAY = 10
+
+local function CancelEditableDelete(entry: CacheEntry)
+	local deleteTask = entry.deleteTask
+	if deleteTask == nil then return end
+
+	task.cancel(deleteTask)
+	entry.deleteTask = nil
+end
+
+local function ScheduleEditableDelete(entry: CacheEntry)
+	if entry.deleteTask ~= nil then return end
+
+	local deleteTask: thread? = nil
+
+	deleteTask = task.delay(CACHE_DELETE_DELAY, function()
+		if entry.deleteTask ~= deleteTask then return end
+
+		entry.deleteTask = nil
+
+		if entry.refCount ~= 0 then return end
+		if Cache[entry.key] ~= entry then return end
+
+		Cache[entry.key] = nil
+		cacheCount -= 1
+		entry.state.EImage:Destroy()
+	end)
+
+	entry.deleteTask = deleteTask
+end
+
+local function RetainEditable(entry: CacheEntry)
+	entry.refCount += 1
+
+	if entry.refCount == 1 then
+		CancelEditableDelete(entry)
+	end
+end
+
+local function ReleaseEditable(entry: CacheEntry)
+	entry.refCount -= 1
+
+	if entry.refCount == 0 then
+		ScheduleEditableDelete(entry)
+	end
+end
+
+local function CancelStaticDelete(entry: StaticCacheEntry)
+	local deleteTask = entry.deleteTask
+	if deleteTask == nil then return end
+
+	task.cancel(deleteTask)
+	entry.deleteTask = nil
+end
+
+local function ScheduleStaticDelete(entry: StaticCacheEntry)
+	if entry.deleteTask ~= nil then return end
+
+	local deleteTask: thread? = nil
+
+	deleteTask = task.delay(CACHE_DELETE_DELAY, function()
+		if entry.deleteTask ~= deleteTask then return end
+
+		entry.deleteTask = nil
+
+		if entry.refCount ~= 0 then return end
+		if StaticCache[entry.key] ~= entry then return end
+
+		StaticCache[entry.key] = nil
+		staticCacheCount -= 1
+	end)
+
+	entry.deleteTask = deleteTask
+end
+
+local function RetainStatic(entry: StaticCacheEntry)
+	entry.refCount += 1
+
+	if entry.refCount == 1 then
+		CancelStaticDelete(entry)
+	end
+end
+
+local function ReleaseStatic(entry: StaticCacheEntry)
+	entry.refCount -= 1
+
+	if entry.refCount == 0 then
+		ScheduleStaticDelete(entry)
+	end
+end
 
 const function GetCacheKey(width: number, height: number, params: RedrawParams): string
 	buffer.writef64(CacheKeyBuf, 0, width)
@@ -197,13 +289,15 @@ const function NewRedrawable(
 
 		Render(state, params)
 
-		entry = {
+		local createdEntry: CacheEntry = {
 			state = state,
 			refCount = 0,
 			key = cacheKey,
+			deleteTask = (nil :: thread?),
 		}
 
-		Cache[cacheKey] = entry
+		entry = createdEntry
+		Cache[cacheKey] = createdEntry
 		cacheCount += 1
 	end
 
@@ -211,7 +305,7 @@ const function NewRedrawable(
 	local destroyed = false
 	local sliceCenter = CalcSliceCenter(width, height, params);
 
-	(entry :: CacheEntry).refCount += 1
+	RetainEditable(entry :: CacheEntry)
 
 	return {
 		Redraw = function(self: Supercorner, newParams: RedrawParams)
@@ -227,50 +321,39 @@ const function NewRedrawable(
 			local newEntry = Cache[newKey]
 
 			if newEntry ~= nil then
-				local oldEImage = state.EImage
-				local ownsOldState = entry == nil or entry.refCount == 1
-
 				if entry ~= nil then
-					entry.refCount -= 1
-
-					if entry.refCount == 0 then
-						Cache[entry.key] = nil
-						cacheCount -= 1
-					end
+					ReleaseEditable(entry)
 				end
 
 				local newEntry = newEntry :: CacheEntry
-				newEntry.refCount += 1
+				RetainEditable(newEntry)
 				state = newEntry.state
-
-				if ownsOldState and oldEImage ~= state.EImage then
-					oldEImage:Destroy()
-				end
+				entry = newEntry
 
 				return
 			end
 
-			-- No cache hit — reuse our state if we're the sole owner, otherwise clone
+			-- No cache hit — keep the old cache entry intact during its delete grace period.
 			if entry ~= nil then
-				entry.refCount -= 1
-
-				if entry.refCount == 0 then
-					Cache[entry.key] = nil
-					cacheCount -= 1
-
-				else
-					state = {
-						EImage = AssetService:CreateEditableImage({ Size = Vector2.new(width, height) }),
-						PixelBuf = buffer.create(width * height * 4),
-						Width = width,
-						Height = height,
-					}
-				end
+				ReleaseEditable(entry)
+				state = {
+					EImage = AssetService:CreateEditableImage({ Size = Vector2.new(width, height) }),
+					PixelBuf = buffer.create(width * height * 4),
+					Width = width,
+					Height = height,
+				}
 			end
 
 			Render(state, newParams)
-			entry = { state = state, refCount = 1, key = newKey }
-			Cache[newKey] = entry
+			local createdEntry: CacheEntry = {
+				state = state,
+				refCount = 1,
+				key = newKey,
+				deleteTask = (nil :: thread?),
+			}
+
+			entry = createdEntry
+			Cache[newKey] = createdEntry
 			cacheCount += 1
 		end,
 
@@ -291,14 +374,7 @@ const function NewRedrawable(
 			destroyed = true
 
 			if entry ~= nil then
-				entry.refCount -= 1
-
-				if entry.refCount == 0 then
-					Cache[entry.key] = nil
-					cacheCount -= 1
-					state.EImage:Destroy()
-				end
-
+				ReleaseEditable(entry)
 				entry = nil
 
 			else
@@ -315,7 +391,7 @@ const function NewStatic(width: number, height: number, params: RedrawParams): S
 	local staticContent: Content
 
 	if staticEntry ~= nil then
-		(staticEntry :: StaticCacheEntry).refCount += 1
+		RetainStatic(staticEntry :: StaticCacheEntry)
 		staticContent = (staticEntry :: StaticCacheEntry).content
 
 	else
@@ -332,13 +408,15 @@ const function NewStatic(width: number, height: number, params: RedrawParams): S
 		staticContent = ToStaticContent(eImage)
 		eImage:Destroy()
 
-		staticEntry = {
+		local createdStaticEntry: StaticCacheEntry = {
 			content = staticContent,
 			refCount = 1,
 			key = cacheKey,
+			deleteTask = (nil :: thread?),
 		}
 
-		StaticCache[cacheKey] = staticEntry :: StaticCacheEntry
+		staticEntry = createdStaticEntry
+		StaticCache[cacheKey] = createdStaticEntry
 		staticCacheCount += 1
 	end
 
@@ -372,12 +450,7 @@ const function NewStatic(width: number, height: number, params: RedrawParams): S
 			if staticEntry == nil then return end
 
 			local staticEntry = staticEntry :: StaticCacheEntry
-			staticEntry.refCount -= 1
-
-			if staticEntry.refCount == 0 then
-				StaticCache[staticEntry.key] = nil
-				staticCacheCount -= 1
-			end
+			ReleaseStatic(staticEntry)
 		end,
 	}
 end

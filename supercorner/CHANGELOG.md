@@ -1,3 +1,8 @@
+# v0.1.1
+- Editable and static cache entries now wait 10 seconds after their reference count reaches zero before being deleted.
+- Reusing a pending cache entry cancels its scheduled deletion, and each entry tracks its own deletion task to prevent duplicate timers.
+- Redrawable supercorners now allocate fresh editable image state for new cache keys so pending cached entries remain intact during the deletion delay.
+
 # v0.1.0
 - Image sizing now accounts for stroke width, preventing strokes from being clipped or rendered as solid fills at small corner radii.
 - Slice center calculation now includes a 2px margin past the inner stroke edge to prevent anti-aliased pixels from being stretched by 9-slice.
