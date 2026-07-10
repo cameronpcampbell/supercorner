@@ -1,6 +1,6 @@
 --!strict
 
-const types = require("./types")
+local types = require("./types")
 
 type CornerPathParams = types.CornerPathParams
 type SvgOp = types.SvgOp
@@ -14,7 +14,7 @@ type SvgPathInput = {
 	bottom_left_path_params: CornerPathParams,
 }
 
-const function get_path_params_for_corner(
+local function get_path_params_for_corner(
 	corner_radius: number,
 	corner_smoothing: number,
 	preserve_smoothing: boolean,
@@ -25,29 +25,29 @@ const function get_path_params_for_corner(
 	local p = (1.0 + smoothing) * corner_radius
 
 	if not preserve_smoothing then
-		const max_corner_smoothing = rounding_and_smoothing_budget / corner_radius - 1.0
+		local max_corner_smoothing = rounding_and_smoothing_budget / corner_radius - 1.0
 		smoothing = math.min(smoothing, max_corner_smoothing)
 		p = math.min(p, rounding_and_smoothing_budget)
 	end
 
-	const arc_measure = 90.0 * (1.0 - smoothing)
-	const arcMeasureHalfRad = math.rad(arc_measure / 2.0)
-	const arc_section_length = math.sin(arcMeasureHalfRad) * corner_radius * math.sqrt(2)
+	local arc_measure = 90.0 * (1.0 - smoothing)
+	local arcMeasureHalfRad = math.rad(arc_measure / 2.0)
+	local arc_section_length = math.sin(arcMeasureHalfRad) * corner_radius * math.sqrt(2)
 
-	const angle_alpha = (90.0 - arc_measure) / 2.0
-	const angleAlphaHalfRad = math.rad(angle_alpha / 2.0)
-	const p3_to_p4_distance = corner_radius * math.tan(angleAlphaHalfRad)
-	const angleBetaRad = math.rad(45.0 * smoothing)
-	const c = p3_to_p4_distance * math.cos(angleBetaRad)
-	const d = c * math.tan(angleBetaRad)
+	local angle_alpha = (90.0 - arc_measure) / 2.0
+	local angleAlphaHalfRad = math.rad(angle_alpha / 2.0)
+	local p3_to_p4_distance = corner_radius * math.tan(angleAlphaHalfRad)
+	local angleBetaRad = math.rad(45.0 * smoothing)
+	local c = p3_to_p4_distance * math.cos(angleBetaRad)
+	local d = c * math.tan(angleBetaRad)
 
 	local b = (p - arc_section_length - c - d) / 3.0
 	local a = 2.0 * b
 
 	if preserve_smoothing and p > rounding_and_smoothing_budget then
-		const p1_to_p3_max_distance = rounding_and_smoothing_budget - d - arc_section_length - c
-		const min_a = p1_to_p3_max_distance / 6.0
-		const max_b = p1_to_p3_max_distance - min_a
+		local p1_to_p3_max_distance = rounding_and_smoothing_budget - d - arc_section_length - c
+		local min_a = p1_to_p3_max_distance / 6.0
+		local max_b = p1_to_p3_max_distance - min_a
 		b = math.min(b, max_b)
 		a = p1_to_p3_max_distance - b
 		p = math.min(p, rounding_and_smoothing_budget)
@@ -101,13 +101,13 @@ local function insert_corner_ops(ops: { SvgOp }, pp: CornerPathParams, corner: n
 	end
 end
 
-const function get_svg_ops(input: SvgPathInput): { SvgOp }
-	const width = input.width
-	const height = input.height
-	const tl = input.top_left_path_params
-	const tr = input.top_right_path_params
-	const br = input.bottom_right_path_params
-	const bl = input.bottom_left_path_params
+local function get_svg_ops(input: SvgPathInput): { SvgOp }
+	local width = input.width
+	local height = input.height
+	local tl = input.top_left_path_params
+	local tr = input.top_right_path_params
+	local br = input.bottom_right_path_params
+	local bl = input.bottom_left_path_params
 
 	local ops: { SvgOp } = table.create(21) :: { SvgOp }
 

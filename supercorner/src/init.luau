@@ -1,10 +1,10 @@
 --!strict
 --!nolint LocalShadow
 
-const Internal = require("@self/internal")
-const Atlas = require("@self/atlas")
+local Internal = require("@self/internal")
+local Atlas = require("@self/atlas")
 
-const AssetService = game:GetService("AssetService")
+local AssetService = game:GetService("AssetService")
 
 export type CreateParams = {
 	CornerRadius: number?,
@@ -73,20 +73,20 @@ type CreateDataModelContentAsync =
     (self: AssetService, content: Content, options: { [string]: any }?)
         -> (Enum.CreateContentResult, Content)
 
-const CAN_CREATE_STATIC_CONTENT = (function()
-    const ok, data = pcall(
+local CAN_CREATE_STATIC_CONTENT = (function()
+    local ok, data = pcall(
         AssetService.CreateDataModelContentAsync, AssetService, Content.none, nil
     )
 
     return if ok then ok else data ~= "CreateDataModelContentAsync is not available yet"
 end)()
 
-const Cache: { [string]: CacheEntry } = {}
-const StaticCache: { [string]: StaticCacheEntry } = {}
+local Cache: { [string]: CacheEntry } = {}
+local StaticCache: { [string]: StaticCacheEntry } = {}
 local cacheCount = 0
 local staticCacheCount = 0
-const CacheKeyBuf = buffer.create(74)
-const CACHE_DELETE_DELAY = 10
+local CacheKeyBuf = buffer.create(74)
+local CACHE_DELETE_DELAY = 10
 
 local function CancelEditableDelete(entry: CacheEntry)
 	local deleteTask = entry.deleteTask
@@ -177,7 +177,7 @@ local function ReleaseStatic(entry: StaticCacheEntry)
 	end
 end
 
-const function GetCacheKey(width: number, height: number, params: RedrawParams): string
+local function GetCacheKey(width: number, height: number, params: RedrawParams): string
 	buffer.writef64(CacheKeyBuf, 0, width)
 	buffer.writef64(CacheKeyBuf, 8, height)
 	buffer.writef64(CacheKeyBuf, 16, params.CornerRadius or 0)
@@ -192,7 +192,7 @@ const function GetCacheKey(width: number, height: number, params: RedrawParams):
 	return buffer.tostring(CacheKeyBuf)
 end
 
-const function Render(state: SupercornerState, params: RedrawParams)
+local function Render(state: SupercornerState, params: RedrawParams)
 	Internal.RenderToBuffer(state.PixelBuf, state.Width, state.Height, params)
 
 	state.EImage:WritePixelsBuffer(
@@ -202,13 +202,13 @@ const function Render(state: SupercornerState, params: RedrawParams)
 	)
 end
 
-const function ToStaticContent(eImage: EditableImage): Content
+local function ToStaticContent(eImage: EditableImage): Content
 	local result, content = (AssetService.CreateDataModelContentAsync :: CreateDataModelContentAsync)(AssetService, Content.fromObject(eImage))
 	assert(result == Enum.CreateContentResult.Success, "Failed to create static content")
 	return content
 end
 
-const function ClampToMaxRadii(
+local function ClampToMaxRadii(
 	params: RedrawParams,
 	maxTopLeft: number,
 	maxTopRight: number,
@@ -264,10 +264,10 @@ const function ClampToMaxRadii(
 	}
 end
 
-const CalcSliceCenter = Internal.CalcSliceCenter
-const CalcSize = Internal.CalcSize
+local CalcSliceCenter = Internal.CalcSliceCenter
+local CalcSize = Internal.CalcSize
 
-const function NewRedrawable(
+local function NewRedrawable(
 	width: number,
 	height: number,
 	params: RedrawParams,
@@ -384,7 +384,7 @@ const function NewRedrawable(
 	}
 end
 
-const function NewStatic(width: number, height: number, params: RedrawParams): Supercorner
+local function NewStatic(width: number, height: number, params: RedrawParams): Supercorner
 	local cacheKey = GetCacheKey(width, height, params)
 	local staticEntry: StaticCacheEntry? = StaticCache[cacheKey]
 	local destroyed = false
@@ -455,7 +455,7 @@ const function NewStatic(width: number, height: number, params: RedrawParams): S
 	}
 end
 
-const function New(params: CreateParams): Supercorner
+local function New(params: CreateParams): Supercorner
 	local defaultRadius: number = params.CornerRadius or 0
 	local topLeft: number = params.TopLeftRadius or defaultRadius
 	local topRight: number = params.TopRightRadius or defaultRadius

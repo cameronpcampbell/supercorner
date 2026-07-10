@@ -3,11 +3,11 @@
 
 -- Edge buffer layout (f32 fields at byte offsets)
 -- [0] yMin  [4] yMax  [8] xAtYmin  [12] dxPerDy  [16] dir (+1/-1)
-const EDGE_STRIDE = 20
+local EDGE_STRIDE = 20
 
 -- Vertex buffer layout (f32 fields at byte offsets)
 -- [0] x  [4] y
-const VERTEX_STRIDE = 8
+local VERTEX_STRIDE = 8
 
 -- Module-level scratch buffers, reused across renders to avoid per-call allocation.
 -- Each buffer grows as needed but is never shrunk.
@@ -50,7 +50,7 @@ end
 -- Fills a span of pixels with a u32 color by writing one pixel then exponentially
 -- doubling via buffer.copy. This is needed as buffer.fill sets every byte to the same
 -- 8-bit value, so it can't write a repeating 4-byte RGBA pattern.
-const function fillInterior(
+local function fillInterior(
     pixelBuf: buffer,
     spanStart: number,
     span: number,
@@ -60,14 +60,14 @@ const function fillInterior(
 
     local filled = 1
     while filled < span do
-        const chunk = math.min(filled, span - filled)
+        local chunk = math.min(filled, span - filled)
         buffer.copy(pixelBuf, spanStart + filled * 4, pixelBuf, spanStart, chunk * 4)
         filled += chunk
     end
 end
 
 -- Clip an edge intersection pair to pixel bounds and fill the span
-const function fillSpanSolid(
+local function fillSpanSolid(
     pixelBuf: buffer,
     rowOffset: number,
     xLeft: number,
@@ -75,9 +75,9 @@ const function fillSpanSolid(
     width: number,
     colorU32: number
 )
-    const pxLeft = math.max(0, math.ceil(xLeft))
-    const pxRight = math.min(width - 1, math.floor(xRight))
-    const span = pxRight - pxLeft + 1
+    local pxLeft = math.max(0, math.ceil(xLeft))
+    local pxRight = math.min(width - 1, math.floor(xRight))
+    local span = pxRight - pxLeft + 1
 
     if span <= 0 then
         return
@@ -89,7 +89,7 @@ end
 -- Signed area coverage for one edge within a single scanline band [yTop, yTop+1].
 -- areaBuf accumulates the pixel-local signed area (used for edge pixels).
 -- fillBuf accumulates the winding delta (propagated across the scanline via prefix sum).
-const function processEdgeAA(
+local function processEdgeAA(
     areaBuf: buffer,
     fillBuf: buffer,
     yMin: number,
@@ -106,44 +106,44 @@ const function processEdgeAA(
         return
     end
 
-    const x0 = xAtYmin + (sy0 - yMin) * dxPerDy
-    const x1 = xAtYmin + (sy1 - yMin) * dxPerDy
-    const h = sy1 - sy0
+    local x0 = xAtYmin + (sy0 - yMin) * dxPerDy
+    local x1 = xAtYmin + (sy1 - yMin) * dxPerDy
+    local h = sy1 - sy0
 
-    const xLo = math.min(x0, x1)
-    const xHi = math.max(x0, x1)
-    const ix0 = math.clamp(math.floor(xLo), 0, width - 1)
-    const ix1 = math.clamp(math.floor(xHi), 0, width - 1)
+    local xLo = math.min(x0, x1)
+    local xHi = math.max(x0, x1)
+    local ix0 = math.clamp(math.floor(xLo), 0, width - 1)
+    local ix1 = math.clamp(math.floor(xHi), 0, width - 1)
 
     -- Near-vertical edges: single pixel column
     if ix0 == ix1 then
-        const avgX = math.clamp(((x0 - ix0) + (x1 - ix0)) / 2, 0, 1)
-        const covered = h * (1 - avgX)
+        local avgX = math.clamp(((x0 - ix0) + (x1 - ix0)) / 2, 0, 1)
+        local covered = h * (1 - avgX)
 
-        const off = ix0 * 4
+        local off = ix0 * 4
         buffer.writef32(areaBuf, off, buffer.readf32(areaBuf, off) + dir * covered)
         buffer.writef32(fillBuf, off, buffer.readf32(fillBuf, off) + dir * h)
         return
     end
 
     -- Near-horizontal edges: split at integer x boundaries
-    const xToY = h / (x1 - x0)
+    local xToY = h / (x1 - x0)
 
     for ix = ix0, ix1 do
-        const cx0 = math.max(ix, xLo)
-        const cx1 = math.min(ix + 1, xHi)
+        local cx0 = math.max(ix, xLo)
+        local cx1 = math.min(ix + 1, xHi)
 
         if cx1 <= cx0 then
             continue
         end
 
-        const cy0 = sy0 + (cx0 - x0) * xToY
-        const cy1 = sy0 + (cx1 - x0) * xToY
-        const subH = math.abs(cy1 - cy0)
-        const avgX = math.clamp(((cx0 - ix) + (cx1 - ix)) / 2, 0, 1)
-        const covered = subH * (1 - avgX)
+        local cy0 = sy0 + (cx0 - x0) * xToY
+        local cy1 = sy0 + (cx1 - x0) * xToY
+        local subH = math.abs(cy1 - cy0)
+        local avgX = math.clamp(((cx0 - ix) + (cx1 - ix)) / 2, 0, 1)
+        local covered = subH * (1 - avgX)
 
-        const off = ix * 4
+        local off = ix * 4
         buffer.writef32(areaBuf, off, buffer.readf32(areaBuf, off) + dir * covered)
         buffer.writef32(fillBuf, off, buffer.readf32(fillBuf, off) + dir * subH)
     end
@@ -152,11 +152,11 @@ end
 -- Scan forward from `start` to find the next pixel with edge data.
 -- Returns the index of the first pixel with non-zero areaBuf or fillBuf,
 -- or scanXMax + 1 if no such pixel exists.
-const function findNextEdge(areaBuf: buffer, fillBuf: buffer, start: number, scanXMax: number): number
+local function findNextEdge(areaBuf: buffer, fillBuf: buffer, start: number, scanXMax: number): number
     local idx = start
 
     while idx <= scanXMax do
-        const off = idx * 4
+        local off = idx * 4
 
         if buffer.readf32(areaBuf, off) ~= 0 or buffer.readf32(fillBuf, off) ~= 0 then
             break
@@ -170,7 +170,7 @@ end
 
 -- Find sorted edge-scanline intersections for the non-AA path.
 -- Returns updated firstEdgeOffset (for active edge tracking) and intersection count.
-const function findIntersections(
+local function findIntersections(
     edgeBuf: buffer,
     edgeEnd: number,
     firstEdgeOffset: number,
@@ -185,21 +185,21 @@ const function findIntersections(
     local xCount = 0
 
     for eOffset = firstEdgeOffset, edgeEnd - EDGE_STRIDE, EDGE_STRIDE do
-        const yMin = buffer.readf32(edgeBuf, eOffset)
+        local yMin = buffer.readf32(edgeBuf, eOffset)
 
         if yMin > scanY then
             break
         end
 
-        const yMax = buffer.readf32(edgeBuf, eOffset + 4)
+        local yMax = buffer.readf32(edgeBuf, eOffset + 4)
 
         if yMax <= scanY then
             continue
         end
 
-        const xAtYmin = buffer.readf32(edgeBuf, eOffset + 8)
-        const dxPerDy = buffer.readf32(edgeBuf, eOffset + 12)
-        const xIntersect = xAtYmin + (scanY - yMin) * dxPerDy
+        local xAtYmin = buffer.readf32(edgeBuf, eOffset + 8)
+        local dxPerDy = buffer.readf32(edgeBuf, eOffset + 12)
+        local xIntersect = xAtYmin + (scanY - yMin) * dxPerDy
 
         -- Insertion sort into xBuf
         local pos = xCount
@@ -216,7 +216,7 @@ const function findIntersections(
     return firstEdgeOffset, xCount
 end
 
-const function rasterize(
+local function rasterize(
     pixelBuf: buffer,
     vertices: buffer,
     vertexCount: number,
@@ -240,26 +240,26 @@ const function rasterize(
     local shapeYMax = -math.huge
 
     for s = 0, subPathCount - 1 do
-        const startIdx = buffer.readu32(subPathStarts, s * 4)
-        const endIdx = if s < subPathCount - 1
+        local startIdx = buffer.readu32(subPathStarts, s * 4)
+        local endIdx = if s < subPathCount - 1
             then buffer.readu32(subPathStarts, (s + 1) * 4)
             else vertexCount
 
         for i = startIdx, endIdx - 1 do
-            const j = if i < endIdx - 1 then i + 1 else startIdx
+            local j = if i < endIdx - 1 then i + 1 else startIdx
 
-            const iOff = i * VERTEX_STRIDE
-            const x0 = buffer.readf32(vertices, iOff)
-            const y0 = buffer.readf32(vertices, iOff + 4)
-            const jOff = j * VERTEX_STRIDE
-            const x1 = buffer.readf32(vertices, jOff)
-            const y1 = buffer.readf32(vertices, jOff + 4)
+            local iOff = i * VERTEX_STRIDE
+            local x0 = buffer.readf32(vertices, iOff)
+            local y0 = buffer.readf32(vertices, iOff + 4)
+            local jOff = j * VERTEX_STRIDE
+            local x1 = buffer.readf32(vertices, jOff)
+            local y1 = buffer.readf32(vertices, jOff + 4)
 
             if y0 == y1 then
                 continue
             end
 
-            const offset = edgeCount * EDGE_STRIDE
+            local offset = edgeCount * EDGE_STRIDE
 
             -- Orient edges so yMin < yMax; dir tracks original winding direction
             if y0 < y1 then
@@ -304,22 +304,22 @@ const function rasterize(
 
     buffer.copy(edgeBuf, 0, sortedBuf, 0, edgeCount * EDGE_STRIDE)
 
-    const rb = math.floor(r * 255 + 0.5)
-    const gb = math.floor(g * 255 + 0.5)
-    const bb = math.floor(b * 255 + 0.5)
-    const ab = math.floor(a * 255 + 0.5)
+    local rb = math.floor(r * 255 + 0.5)
+    local gb = math.floor(g * 255 + 0.5)
+    local bb = math.floor(b * 255 + 0.5)
+    local ab = math.floor(a * 255 + 0.5)
 
-    const colorU32 = rb + gb * 0x100 + bb * 0x10000 + ab * 0x1000000
-    const colorRgb = rb + gb * 0x100 + bb * 0x10000
+    local colorU32 = rb + gb * 0x100 + bb * 0x10000 + ab * 0x1000000
+    local colorRgb = rb + gb * 0x100 + bb * 0x10000
 
-    const xBuf = ensureXBuf(math.max(1, edgeCount))
-    const rowStride = dstRowStride or (width * 4)
-    const xByteOff = (dstXOffset or 0) * 4
-    const yOff = dstYOffset or 0
-    const edgeEnd = edgeCount * EDGE_STRIDE
+    local xBuf = ensureXBuf(math.max(1, edgeCount))
+    local rowStride = dstRowStride or (width * 4)
+    local xByteOff = (dstXOffset or 0) * 4
+    local yOff = dstYOffset or 0
+    local edgeEnd = edgeCount * EDGE_STRIDE
 
-    const yStart = math.max(0, math.floor(shapeYMin))
-    const yEnd = math.min(height - 1, math.floor(shapeYMax))
+    local yStart = math.max(0, math.floor(shapeYMin))
+    local yEnd = math.min(height - 1, math.floor(shapeYMax))
 
     -- Clear only the bounding-box rows instead of the full buffer.
     -- buffer.create zero-initializes, so first render is already clean;
@@ -334,7 +334,7 @@ const function rasterize(
     local firstEdgeOffset = 0
 
     if antiAlias then
-        const areaBuf, fillBuf = ensureScanlineBufs(width)
+        local areaBuf, fillBuf = ensureScanlineBufs(width)
         -- Initialize to full width so the first scanline clears any stale data
         -- left over from a previous render in the reused scratch buffers.
         local prevXMin = 0
@@ -343,8 +343,8 @@ const function rasterize(
         for y = yStart, yEnd do
             -- Only clear the pixel range dirtied by the previous scanline
             if prevXMin <= prevXMax then
-                const clearOff = prevXMin * 4
-                const clearLen = (prevXMax - prevXMin + 1) * 4
+                local clearOff = prevXMin * 4
+                local clearLen = (prevXMax - prevXMin + 1) * 4
                 buffer.fill(areaBuf, clearOff, 0, clearLen)
                 buffer.fill(fillBuf, clearOff, 0, clearLen)
             end
@@ -358,21 +358,21 @@ const function rasterize(
             end
 
             for eOffset = firstEdgeOffset, edgeEnd - EDGE_STRIDE, EDGE_STRIDE do
-                const eYMin = buffer.readf32(edgeBuf, eOffset)
+                local eYMin = buffer.readf32(edgeBuf, eOffset)
 
                 if eYMin >= y + 1 then
                     break
                 end
 
-                const eYMax = buffer.readf32(edgeBuf, eOffset + 4)
-                const eX = buffer.readf32(edgeBuf, eOffset + 8)
-                const eDx = buffer.readf32(edgeBuf, eOffset + 12)
-                const eDir = buffer.readf32(edgeBuf, eOffset + 16)
+                local eYMax = buffer.readf32(edgeBuf, eOffset + 4)
+                local eX = buffer.readf32(edgeBuf, eOffset + 8)
+                local eDx = buffer.readf32(edgeBuf, eOffset + 12)
+                local eDir = buffer.readf32(edgeBuf, eOffset + 16)
 
-                const ex0 = eX + (math.max(y, eYMin) - eYMin) * eDx
-                const ex1 = eX + (math.min(y + 1, eYMax) - eYMin) * eDx
-                const ixl = math.clamp(math.floor(math.min(ex0, ex1)), 0, width - 1)
-                const ixr = math.clamp(math.floor(math.max(ex0, ex1)), 0, width - 1)
+                local ex0 = eX + (math.max(y, eYMin) - eYMin) * eDx
+                local ex1 = eX + (math.min(y + 1, eYMax) - eYMin) * eDx
+                local ixl = math.clamp(math.floor(math.min(ex0, ex1)), 0, width - 1)
+                local ixr = math.clamp(math.floor(math.max(ex0, ex1)), 0, width - 1)
 
                 if ixl < scanXMin then scanXMin = ixl end
                 if ixr > scanXMax then scanXMax = ixr end
@@ -396,10 +396,10 @@ const function rasterize(
             local px = scanXMin
 
             while px <= scanXMax do
-                const off = px * 4
-                const area = buffer.readf32(areaBuf, off)
-                const fill = buffer.readf32(fillBuf, off)
-                const coverage = math.min(math.abs(area + sum), 1)
+                local off = px * 4
+                local area = buffer.readf32(areaBuf, off)
+                local fill = buffer.readf32(fillBuf, off)
+                local coverage = math.min(math.abs(area + sum), 1)
                 sum += fill
 
                 -- Interior skip: solid pixel with no edge contribution means we're
@@ -409,7 +409,7 @@ const function rasterize(
                         solidRunStart = px
                     end
 
-                    const skipTo = findNextEdge(areaBuf, fillBuf, px + 1, scanXMax)
+                    local skipTo = findNextEdge(areaBuf, fillBuf, px + 1, scanXMax)
                     fillInterior(pixelBuf, rowOffset + solidRunStart * 4, skipTo - solidRunStart, colorU32)
                     solidRunStart = -1
                     px = skipTo
@@ -431,7 +431,7 @@ const function rasterize(
                 end
 
                 if coverage > 0 then
-                    const aaAlpha = math.floor(ab * coverage + 0.5)
+                    local aaAlpha = math.floor(ab * coverage + 0.5)
                     buffer.writeu32(pixelBuf, rowOffset + off, colorRgb + aaAlpha * 0x1000000)
                 end
 
@@ -450,14 +450,14 @@ const function rasterize(
     else
         -- Non-AA: even-odd scanline fill at pixel centers
         for y = yStart, yEnd do
-            const scanY = y + 0.5
+            local scanY = y + 0.5
             local xCount: number
             firstEdgeOffset, xCount = findIntersections(edgeBuf, edgeEnd, firstEdgeOffset, xBuf, scanY)
 
             local pair = 0
             while pair < xCount - 1 do
-                const xLeft = buffer.readf32(xBuf, pair * 4)
-                const xRight = buffer.readf32(xBuf, (pair + 1) * 4)
+                local xLeft = buffer.readf32(xBuf, pair * 4)
+                local xRight = buffer.readf32(xBuf, (pair + 1) * 4)
                 fillSpanSolid(pixelBuf, rowOffset, xLeft, xRight, width, colorU32)
                 pair += 2
             end

@@ -4,23 +4,60 @@ on:
   push:
     tags: ["supercorner-v*"]
 
+concurrency:
+  group: supercorner-release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  PESDE_RELEASE: "v0.7.3+registry.0.2.3"
+
 jobs:
   preflight:
     name: Preflight Checks
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     defaults:
       run:
         working-directory: supercorner
     steps:
       - uses: actions/checkout@v6
 
-      - name: Check wally.toml version matches tag
+      - name: Install pesde
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          INSTALL_ROOT="$RUNNER_TEMP/pesde"
+          mkdir -p "$INSTALL_ROOT" "$INSTALL_ROOT/bin" "$INSTALL_ROOT/extracted"
+          gh release download "$PESDE_RELEASE" \
+            --repo pesde-pkg/pesde \
+            --pattern "*linux-x86_64.zip" \
+            --dir "$INSTALL_ROOT"
+
+          ARCHIVE="$(find "$INSTALL_ROOT" -maxdepth 1 -type f -name '*linux-x86_64.zip' -print -quit)"
+          if [ -z "$ARCHIVE" ]; then
+            echo "::error::Could not find the downloaded pesde archive."
+            exit 1
+          fi
+
+          unzip -q "$ARCHIVE" -d "$INSTALL_ROOT/extracted"
+          PESDE_BIN="$(find "$INSTALL_ROOT/extracted" -type f -name pesde -print -quit)"
+          if [ -z "$PESDE_BIN" ]; then
+            echo "::error::Could not find the pesde binary in the downloaded archive."
+            exit 1
+          fi
+
+          install -m 0755 "$PESDE_BIN" "$INSTALL_ROOT/bin/pesde"
+          echo "$INSTALL_ROOT/bin" >> "$GITHUB_PATH"
+          "$INSTALL_ROOT/bin/pesde" -v
+
+      - name: Check pesde.toml version matches tag
         run: |
           TAG="${{ github.ref_name }}"
-          WALLY_VERSION="$(grep -m1 '^version' wally.toml | sed 's/.*"\(.*\)".*/\1/')"
+          MANIFEST_VERSION="$(sed -n 's/^version = "\([^"]*\)"/\1/p' pesde.toml | head -n 1)"
           TAG_VERSION="${TAG#supercorner-v}"
-          if [ "$WALLY_VERSION" != "$TAG_VERSION" ]; then
-            echo "::error::wally.toml version ($WALLY_VERSION) does not match tag ($TAG). Update the version in wally.toml before releasing."
+          if [ "$MANIFEST_VERSION" != "$TAG_VERSION" ]; then
+            echo "::error::pesde.toml version ($MANIFEST_VERSION) does not match tag ($TAG). Update the version in pesde.toml before releasing."
             exit 1
           fi
 
@@ -28,13 +65,31 @@ jobs:
         run: |
           TAG="${{ github.ref_name }}"
           VERSION="${TAG#supercorner-}"
-          if ! grep -q "^# $VERSION" CHANGELOG.md; then
+          if ! grep -q "^# $VERSION$" CHANGELOG.md; then
             echo "::error::No changelog entry found for $VERSION in CHANGELOG.md. Add a '# $VERSION' section before releasing."
             exit 1
           fi
 
+      - name: Verify locked install
+        run: pesde install --locked
+
+      - name: Build and inspect package archive
+        run: |
+          pesde publish --dry-run --yes
+
+          {
+            printf '%s\n' LICENSE.md README.md pesde.toml
+            find src -type f -name '*.luau' -print
+          } | LC_ALL=C sort > "$RUNNER_TEMP/expected-package-files.txt"
+
+          tar -tzf package.tar.gz | LC_ALL=C sort > "$RUNNER_TEMP/actual-package-files.txt"
+          if ! diff -u "$RUNNER_TEMP/expected-package-files.txt" "$RUNNER_TEMP/actual-package-files.txt"; then
+            echo "::error::The pesde archive contains unexpected or missing files."
+            exit 1
+          fi
+
   create-release:
-    name: Create Release
+    name: Create Draft Release
     needs: preflight
     runs-on: ubuntu-latest
     permissions:
@@ -42,15 +97,15 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Create Release
+      - name: Create release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           TAG="${{ github.ref_name }}"
-          VERSION="${TAG#supercorner-}"
+          CHANGELOG_VERSION="${TAG#supercorner-}"
+          VERSION="${TAG#supercorner-v}"
 
-          # Extract changelog section for this version
-          CHANGELOG=$(awk -v tag="$VERSION" '
+          CHANGELOG=$(awk -v tag="$CHANGELOG_VERSION" '
             BEGIN { found=0 }
             /^# / {
               if (found) exit
@@ -60,16 +115,12 @@ jobs:
           ' supercorner/CHANGELOG.md | sed '/./,$!d' | sed -e :a -e '/^\n*$/{$d;N;ba}')
 
           if [ -z "$CHANGELOG" ]; then
-            echo "::error::No changelog entry found for $VERSION in CHANGELOG.md"
+            echo "::error::No changelog entry found for $CHANGELOG_VERSION in CHANGELOG.md"
             exit 1
           fi
 
-          # Increase heading levels by 1 (# -> ##, ## -> ###)
           CHANGELOG=$(printf '%s' "$CHANGELOG" | sed 's/^#/##/')
-
-          # Strip leading 'v' for wally version URL
-          VERSION="${TAG#supercorner-v}"
-          WALLY_URL="https://wally.run/package/cameronpcampbell/supercorner?version=${VERSION}"
+          PESDE_URL="https://pesde.dev/packages/cameronpcampbell/supercorner"
 
           cat > /tmp/release_body.md << EOF
           # Changelog
@@ -77,10 +128,18 @@ jobs:
 
           ---
 
-          # Wally
-          Install via [Wally](${WALLY_URL}):
+          # pesde
+          [View Supercorner on pesde](${PESDE_URL}).
+
+          \`\`\`sh
+          pesde add cameronpcampbell/supercorner@${VERSION}
+          \`\`\`
+
+          Or add it directly to \`pesde.toml\`:
+
           \`\`\`toml
-          supercorner = "cameronpcampbell/supercorner@${VERSION}"
+          [dependencies]
+          supercorner = { name = "cameronpcampbell/supercorner", version = "^${VERSION}", target = "roblox" }
           \`\`\`
           EOF
 
@@ -91,43 +150,69 @@ jobs:
             gh release create "$TAG" --draft --verify-tag --title "Supercorner v${VERSION}" --notes-file /tmp/release_body.md
           fi
 
-      - name: Rokit Cache Restore
-        id: cache-rokit
-        uses: actions/cache/restore@v5
-        with:
-          path: ~/.rokit
-          key: rokit-${{ hashFiles('rokit.toml') }}
-
-      - name: Install Rokit
-        if: steps.cache-rokit.outputs.cache-hit != 'true'
-        run: curl -fsSL https://raw.githubusercontent.com/rojo-rbx/rokit/main/scripts/install.sh | bash
-
-      - name: Install Tools
-        run: |
-          export PATH="$HOME/.rokit/bin:$PATH"
-          rokit trust rojo-rbx/rojo
-          rokit trust UpliftGames/wally
-          rokit install
-
-      - name: Rokit Cache Save
-        if: always()
-        uses: actions/cache/save@v5
-        with:
-          path: ~/.rokit
-          key: rokit-${{ hashFiles('rokit.toml') }}
-
-      - name: Publish to Wally
+  publish-package:
+    name: Publish to pesde
+    needs: create-release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
         working-directory: supercorner
-        run: |
-          export PATH="$HOME/.rokit/bin:$PATH"
-          mkdir -p ~/.wally
-          cat > ~/.wally/auth.toml << 'EOF'
-          [tokens]
-          "https://api.wally.run/" = "${{ secrets.WALLY_TOKEN }}"
-          EOF
-          wally publish
+    steps:
+      - uses: actions/checkout@v6
 
-      - name: Publish Release
+      - name: Install pesde
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release edit "${{ github.ref_name }}" --draft=false
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          INSTALL_ROOT="$RUNNER_TEMP/pesde"
+          mkdir -p "$INSTALL_ROOT" "$INSTALL_ROOT/bin" "$INSTALL_ROOT/extracted"
+          gh release download "$PESDE_RELEASE" \
+            --repo pesde-pkg/pesde \
+            --pattern "*linux-x86_64.zip" \
+            --dir "$INSTALL_ROOT"
+
+          ARCHIVE="$(find "$INSTALL_ROOT" -maxdepth 1 -type f -name '*linux-x86_64.zip' -print -quit)"
+          if [ -z "$ARCHIVE" ]; then
+            echo "::error::Could not find the downloaded pesde archive."
+            exit 1
+          fi
+
+          unzip -q "$ARCHIVE" -d "$INSTALL_ROOT/extracted"
+          PESDE_BIN="$(find "$INSTALL_ROOT/extracted" -type f -name pesde -print -quit)"
+          if [ -z "$PESDE_BIN" ]; then
+            echo "::error::Could not find the pesde binary in the downloaded archive."
+            exit 1
+          fi
+
+          install -m 0755 "$PESDE_BIN" "$INSTALL_ROOT/bin/pesde"
+          echo "$INSTALL_ROOT/bin" >> "$GITHUB_PATH"
+          "$INSTALL_ROOT/bin/pesde" -v
+
+      - name: Authenticate with pesde
+        env:
+          PESDE_TOKEN: ${{ secrets.PESDE_TOKEN }}
+        run: |
+          if [ -z "$PESDE_TOKEN" ]; then
+            echo "::error::The PESDE_TOKEN repository secret is not configured."
+            exit 1
+          fi
+
+          pesde auth login --token "$PESDE_TOKEN"
+          pesde auth whoami
+
+      - name: Publish package
+        run: pesde publish --yes
+
+  publish-release:
+    name: Publish GitHub Release
+    needs: publish-package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release edit "${{ github.ref_name }}" --draft=false --repo "${{ github.repository }}"

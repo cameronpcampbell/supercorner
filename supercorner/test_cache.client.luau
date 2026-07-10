@@ -1,28 +1,28 @@
 --!strict
 
-const RepStorage = game:GetService("ReplicatedStorage")
-const Players = game:GetService("Players")
+local RepStorage = game:GetService("ReplicatedStorage")
+local Players = game:GetService("Players")
 
-const Supercorner = require(RepStorage.supercorner)
+local Supercorner = require(RepStorage.supercorner)
 
-const GRID_COLS = 4
-const GRID_ROWS = 4
-const CELL_SIZE = 100
-const GAP = 10
-const CORNER_RADIUS = 25
-const CORNER_SMOOTHING = 1.
+local GRID_COLS = 4
+local GRID_ROWS = 4
+local CELL_SIZE = 100
+local GAP = 10
+local CORNER_RADIUS = 25
+local CORNER_SMOOTHING = 1.
 
-const ScreenGui = Instance.new("ScreenGui")
+local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.IgnoreGuiInset = true
 ScreenGui.Parent = Players.LocalPlayer.PlayerGui
 
-const Bg = Instance.new("Frame")
+local Bg = Instance.new("Frame")
 Bg.Size = UDim2.fromScale(1, 1)
 Bg.BackgroundColor3 = Color3.fromRGB(255, 253, 240)
 Bg.BorderSizePixel = 0
 Bg.Parent = ScreenGui
 
-const StatusLabel = Instance.new("TextLabel")
+local StatusLabel = Instance.new("TextLabel")
 StatusLabel.Size = UDim2.new(1, 0, 0, 40)
 StatusLabel.Position = UDim2.new(0, 0, 0, 20)
 StatusLabel.BackgroundTransparency = 1
@@ -31,7 +31,7 @@ StatusLabel.TextSize = 18
 StatusLabel.Font = Enum.Font.GothamBold
 StatusLabel.Parent = ScreenGui
 
-const GridContainer = Instance.new("Frame")
+local GridContainer = Instance.new("Frame")
 GridContainer.Size = UDim2.fromOffset(
 	GRID_COLS * CELL_SIZE + (GRID_COLS - 1) * GAP,
 	GRID_ROWS * CELL_SIZE + (GRID_ROWS - 1) * GAP
@@ -41,7 +41,7 @@ GridContainer.Position = UDim2.fromScale(0.5, 0.5)
 GridContainer.BackgroundTransparency = 1
 GridContainer.Parent = Bg
 
-const GridLayout = Instance.new("UIGridLayout")
+local GridLayout = Instance.new("UIGridLayout")
 GridLayout.CellSize = UDim2.fromOffset(CELL_SIZE, CELL_SIZE)
 GridLayout.CellPadding = UDim2.fromOffset(GAP, GAP)
 GridLayout.SortOrder = Enum.SortOrder.LayoutOrder

@@ -1,0 +1,24 @@
+name = "cameronpcampbell/supercorner"
+version = "0.1.1"
+description = "A Figma-inspired alternative to Roblox's UICorner."
+license = "MIT"
+authors = ["Cameron P Campbell"]
+repository = "https://github.com/cameronpcampbell/supercorner"
+
+includes = [
+    "pesde.toml",
+    "README.md",
+    "LICENSE.md",
+    "src/**/*.luau",
+]
+
+[target]
+environment = "roblox"
+lib = "src/init.luau"
+build_files = ["src"]
+
+[indices]
+default = "https://github.com/pesde-pkg/index"
+
+[engines]
+pesde = "^0.7.3"
