@@ -70,8 +70,43 @@ jobs:
             exit 1
           fi
 
-      - name: Verify locked install
-        run: pesde install --locked
+      - name: Refresh lockfile version
+        run: |
+          cp pesde.lock "$RUNNER_TEMP/pesde.lock.before"
+          pesde install
+
+          awk '
+            !normalized && /^version = / {
+              print "version = \"<root-version>\""
+              normalized = 1
+              next
+            }
+            { print }
+          ' "$RUNNER_TEMP/pesde.lock.before" > "$RUNNER_TEMP/lock.before"
+
+          awk '
+            !normalized && /^version = / {
+              print "version = \"<root-version>\""
+              normalized = 1
+              next
+            }
+            { print }
+          ' pesde.lock > "$RUNNER_TEMP/lock.after"
+
+          if ! diff -u "$RUNNER_TEMP/lock.before" "$RUNNER_TEMP/lock.after"; then
+            echo "::error::pesde.lock changed beyond the root package version. Regenerate and review it locally."
+            exit 1
+          fi
+
+          MANIFEST_VERSION="$(awk -F '"' '/^version = "/ { print $2; exit }' pesde.toml)"
+          LOCK_VERSION="$(awk -F '"' '/^version = "/ { print $2; exit }' pesde.lock)"
+
+          if [ "$LOCK_VERSION" != "$MANIFEST_VERSION" ]; then
+            echo "::error::Regenerated lockfile version ($LOCK_VERSION) does not match pesde.toml ($MANIFEST_VERSION)."
+            exit 1
+          fi
+
+          echo "pesde.lock dependency resolution is unchanged."
 
       - name: Build and inspect package archive
         run: |
@@ -189,6 +224,44 @@ jobs:
           install -m 0755 "$PESDE_BIN" "$INSTALL_ROOT/bin/pesde"
           echo "$INSTALL_ROOT/bin" >> "$GITHUB_PATH"
           "$INSTALL_ROOT/bin/pesde" -v
+
+      - name: Refresh lockfile version
+        run: |
+          cp pesde.lock "$RUNNER_TEMP/pesde.lock.before"
+          pesde install
+
+          awk '
+            !normalized && /^version = / {
+              print "version = \"<root-version>\""
+              normalized = 1
+              next
+            }
+            { print }
+          ' "$RUNNER_TEMP/pesde.lock.before" > "$RUNNER_TEMP/lock.before"
+
+          awk '
+            !normalized && /^version = / {
+              print "version = \"<root-version>\""
+              normalized = 1
+              next
+            }
+            { print }
+          ' pesde.lock > "$RUNNER_TEMP/lock.after"
+
+          if ! diff -u "$RUNNER_TEMP/lock.before" "$RUNNER_TEMP/lock.after"; then
+            echo "::error::pesde.lock changed beyond the root package version. Regenerate and review it locally."
+            exit 1
+          fi
+
+          MANIFEST_VERSION="$(awk -F '"' '/^version = "/ { print $2; exit }' pesde.toml)"
+          LOCK_VERSION="$(awk -F '"' '/^version = "/ { print $2; exit }' pesde.lock)"
+
+          if [ "$LOCK_VERSION" != "$MANIFEST_VERSION" ]; then
+            echo "::error::Regenerated lockfile version ($LOCK_VERSION) does not match pesde.toml ($MANIFEST_VERSION)."
+            exit 1
+          fi
+
+          echo "pesde.lock dependency resolution is unchanged."
 
       - name: Authenticate with pesde
         env:

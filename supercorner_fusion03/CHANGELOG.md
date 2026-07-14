@@ -1,3 +1,10 @@
+# v0.1.2
+- Improved rendering and atlas performance.
+- Reduced unnecessary reactive redraws.
+- Added reactive `StrokeThickness` updates.
+- Warns when reactive geometry requires `Redrawable = true`.
+- Fixed children passed from other Fusion instances.
+
 # v0.1.1
 - Added `Button` support to `Supercorner.new` and `Supercorner.atlas`, allowing the generated root to be a `TextButton`.
 - Added `RootChildren` for mounting children directly under the generated root; regular Fusion children now live in a named `Content` layer.

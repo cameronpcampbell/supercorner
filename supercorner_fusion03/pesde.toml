@@ -1,5 +1,5 @@
 name = "cameronpcampbell/supercorner_fusion03"
-version = "0.1.1"
+version = "0.1.2"
 description = "Fusion 0.3 wrapper for Supercorner (A figma-inspired alternative to Roblox's UICorner)."
 license = "MIT"
 authors = ["Cameron P Campbell"]
@@ -35,6 +35,5 @@ scripts = { name = "pesde/scripts_rojo", version = "^0.2.0", target = "lune" }
 rojo = { name = "pesde/rojo", version = "^7.5.1", target = "lune" }
 
 [dependencies]
-supercorner = { path = "/Volumes/T7/supercorner/supercorner" }
-#supercorner = { name = "cameronpcampbell/supercorner", version = "^0.1.1", target = "roblox" }
+supercorner = { name = "cameronpcampbell/supercorner", version = "^0.1.2", target = "roblox" }
 fusion = { wally = "elttob/fusion", version = "0.3.0" }
