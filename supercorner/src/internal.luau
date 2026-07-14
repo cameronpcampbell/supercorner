@@ -20,6 +20,25 @@ export type RedrawParams = {
 local VERTEX_STRIDE = 8
 local SingleSubPath = buffer.create(4)
 buffer.writeu32(SingleSubPath, 0, 0)
+local DoubleSubPath = buffer.create(8)
+buffer.writeu32(DoubleSubPath, 0, 0)
+
+-- RenderToBuffer never yields, so these private buffers can be reused between
+-- calls just like the rasterizer and curve-subdivision scratch storage.
+local OuterVertexBuf = buffer.create(0)
+local InnerVertexBuf = buffer.create(0)
+local CombinedVertexBuf = buffer.create(0)
+local PathOps: { FigmaSquircle.SvgOp } = {}
+
+local function EnsureCombinedVertexBuf(vertexCount: number): buffer
+	local requiredBytes = vertexCount * VERTEX_STRIDE
+
+	if buffer.len(CombinedVertexBuf) < requiredBytes then
+		CombinedVertexBuf = buffer.create(requiredBytes)
+	end
+
+	return CombinedVertexBuf
+end
 
 -- All geometry is rendered at 2x scale for HiDPI. Params use logical pixels;
 -- the render function doubles radii to match the internal coordinate space.
@@ -48,11 +67,12 @@ local function RenderToBuffer(pixelBuf: buffer, width: number, height: number, p
 		bottomRightCornerRadius = br2x,
 		bottomLeftCornerRadius = bl2x,
 		preserveSmoothing = params.PreserveSmoothing,
-	})
+	}, PathOps)
 
 	local antiAlias = if params.AntiAlias ~= nil then params.AntiAlias else true
 	local tolerance = if antiAlias then 1/8 else 1/4
-	local outerVertices, outerVertexCount = Flatten(outerOps, tolerance)
+	local outerVertices, outerVertexCount = Flatten(outerOps, tolerance, OuterVertexBuf)
+	OuterVertexBuf = outerVertices
 
 	local finalVertices = outerVertices
 	local finalVertexCount = outerVertexCount
@@ -83,13 +103,14 @@ local function RenderToBuffer(pixelBuf: buffer, width: number, height: number, p
 			bottomLeftCornerRadius =
 				if bl2x then math.max(0, bl2x - strokePx) else nil,
 			preserveSmoothing = params.PreserveSmoothing,
-		})
+		}, PathOps)
 
-		local innerVertices, innerVertexCount = Flatten(innerOps, tolerance)
+		local innerVertices, innerVertexCount = Flatten(innerOps, tolerance, InnerVertexBuf)
+		InnerVertexBuf = innerVertices
 
 		-- Build combined vertex buffer: outer + reversed/offset inner
 		local totalCount = outerVertexCount + innerVertexCount
-		local combined = buffer.create(totalCount * VERTEX_STRIDE)
+		local combined = EnsureCombinedVertexBuf(totalCount)
 		buffer.copy(combined, 0, outerVertices, 0, outerVertexCount * VERTEX_STRIDE)
 
 		for idx = 0, innerVertexCount - 1 do
@@ -101,9 +122,8 @@ local function RenderToBuffer(pixelBuf: buffer, width: number, height: number, p
 
 		finalVertices = combined
 		finalVertexCount = totalCount
-		subPathStarts = buffer.create(8)
-		buffer.writeu32(subPathStarts, 0, 0)
-		buffer.writeu32(subPathStarts, 4, outerVertexCount)
+		buffer.writeu32(DoubleSubPath, 4, outerVertexCount)
+		subPathStarts = DoubleSubPath
 		subPathCount = 2
 	end
 

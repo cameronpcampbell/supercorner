@@ -1,5 +1,5 @@
 name = "cameronpcampbell/supercorner"
-version = "0.1.1"
+version = "0.1.2"
 description = "A Figma-inspired alternative to Roblox's UICorner."
 license = "MIT"
 authors = ["Cameron P Campbell"]

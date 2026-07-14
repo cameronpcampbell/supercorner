@@ -35,5 +35,6 @@ scripts = { name = "pesde/scripts_rojo", version = "^0.2.0", target = "lune" }
 rojo = { name = "pesde/rojo", version = "^7.5.1", target = "lune" }
 
 [dependencies]
-supercorner = { name = "cameronpcampbell/supercorner", version = "^0.1.1", target = "roblox" }
+supercorner = { path = "/Volumes/T7/supercorner/supercorner" }
+#supercorner = { name = "cameronpcampbell/supercorner", version = "^0.1.1", target = "roblox" }
 fusion = { wally = "elttob/fusion", version = "0.3.0" }

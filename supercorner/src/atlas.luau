@@ -72,10 +72,6 @@ local function GetAtlasCacheKey(params: AtlasParams): string
 	return buffer.tostring(CacheKeyBuf)
 end
 
-local function Lerp(a: number, b: number, t: number): number
-	return a + (b - a) * t
-end
-
 local function ResolveAtlasParams(params: CreateAtlasParams): (number, number, number, number, number, number)
 	local cornerRadius = params.CornerRadius or 0
 	local cornerSmoothing = params.CornerSmoothing or 1
@@ -84,28 +80,6 @@ local function ResolveAtlasParams(params: CreateAtlasParams): (number, number, n
 	local br = params.BottomRightRadius or cornerRadius
 	local bl = params.BottomLeftRadius or cornerRadius
 	return cornerSmoothing, cornerRadius, tl, tr, br, bl
-end
-
-local function InterpolateParams(
-	startParams: CreateAtlasParams,
-	endParams: CreateAtlasParams,
-	alpha: number,
-	atlasParams: AtlasParams
-): Internal.RedrawParams
-	local startSmoothing, startDefault, startTL, startTR, startBR, startBL = ResolveAtlasParams(startParams)
-	local endSmoothing, endDefault, endTL, endTR, endBR, endBL = ResolveAtlasParams(endParams)
-
-	return {
-		CornerRadius = Lerp(startDefault, endDefault, alpha),
-		CornerSmoothing = Lerp(startSmoothing, endSmoothing, alpha),
-		TopLeftRadius = Lerp(startTL, endTL, alpha),
-		TopRightRadius = Lerp(startTR, endTR, alpha),
-		BottomRightRadius = Lerp(startBR, endBR, alpha),
-		BottomLeftRadius = Lerp(startBL, endBL, alpha),
-		PreserveSmoothing = atlasParams.PreserveSmoothing,
-		AntiAlias = atlasParams.AntiAlias,
-		Stroke = atlasParams.Stroke,
-	}
 end
 
 type KeypointLayout = {
@@ -165,13 +139,31 @@ local function Atlas(params: AtlasParams): SupercornerAtlas
 
 	-- Pass 1: compute layout
 	local keypointCount = params.Keypoints
+	local startSmoothing, startDefault, startTL, startTR, startBR, startBL = ResolveAtlasParams(params.Start)
+	local endSmoothing, endDefault, endTL, endTR, endBR, endBL = ResolveAtlasParams(params.End)
+	local smoothingDelta = endSmoothing - startSmoothing
+	local defaultDelta = endDefault - startDefault
+	local topLeftDelta = endTL - startTL
+	local topRightDelta = endTR - startTR
+	local bottomRightDelta = endBR - startBR
+	local bottomLeftDelta = endBL - startBL
 
 	local function computeLayouts(count: number): { KeypointLayout }
 		local result = table.create(count) :: { KeypointLayout }
 
 		for idx = 1, count do
 			local alpha = if count > 1 then (idx - 1) / (count - 1) else 0
-			local interpolated = InterpolateParams(params.Start, params.End, alpha, params)
+			local interpolated: Internal.RedrawParams = {
+				CornerRadius = startDefault + defaultDelta * alpha,
+				CornerSmoothing = startSmoothing + smoothingDelta * alpha,
+				TopLeftRadius = startTL + topLeftDelta * alpha,
+				TopRightRadius = startTR + topRightDelta * alpha,
+				BottomRightRadius = startBR + bottomRightDelta * alpha,
+				BottomLeftRadius = startBL + bottomLeftDelta * alpha,
+				PreserveSmoothing = params.PreserveSmoothing,
+				AntiAlias = params.AntiAlias,
+				Stroke = params.Stroke,
+			}
 
 			local width, height = Internal.CalcSize(
 				interpolated.TopLeftRadius or interpolated.CornerRadius or 0,

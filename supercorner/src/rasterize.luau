@@ -18,6 +18,17 @@ local scratchXCap = 1
 local scratchAreaBuf = buffer.create(0)
 local scratchFillBuf = buffer.create(0)
 local scratchScanlineCap = 0
+local scratchSortedEdgeBuf = buffer.create(0)
+local scratchSortedEdgeCap = 0
+local scratchEdgeIndices: { number } = {}
+local edgeSortSourceBuf = buffer.create(0)
+local scratchSolidBuf = buffer.create(0)
+local scratchSolidCap = 0
+local scratchSolidColor: number? = nil
+
+local function compareEdgeIndices(a: number, b: number): boolean
+    return buffer.readf32(edgeSortSourceBuf, a * EDGE_STRIDE) < buffer.readf32(edgeSortSourceBuf, b * EDGE_STRIDE)
+end
 
 local function ensureEdgeBuf(needed: number): buffer
     if needed > scratchEdgeCap then
@@ -47,6 +58,15 @@ local function ensureScanlineBufs(width: number): (buffer, buffer)
     return scratchAreaBuf, scratchFillBuf
 end
 
+local function ensureSortedEdgeBuf(needed: number): buffer
+    if needed > scratchSortedEdgeCap then
+        scratchSortedEdgeCap = needed
+        scratchSortedEdgeBuf = buffer.create(needed * EDGE_STRIDE)
+    end
+
+    return scratchSortedEdgeBuf
+end
+
 -- Fills a span of pixels with a u32 color by writing one pixel then exponentially
 -- doubling via buffer.copy. This is needed as buffer.fill sets every byte to the same
 -- 8-bit value, so it can't write a repeating 4-byte RGBA pattern.
@@ -66,6 +86,21 @@ local function fillInterior(
     end
 end
 
+local function ensureSolidBuf(width: number, colorU32: number): buffer
+    if width > scratchSolidCap then
+        scratchSolidCap = width
+        scratchSolidBuf = buffer.create(width * 4)
+        scratchSolidColor = nil
+    end
+
+    if scratchSolidColor ~= colorU32 then
+        fillInterior(scratchSolidBuf, 0, scratchSolidCap, colorU32)
+        scratchSolidColor = colorU32
+    end
+
+    return scratchSolidBuf
+end
+
 -- Clip an edge intersection pair to pixel bounds and fill the span
 local function fillSpanSolid(
     pixelBuf: buffer,
@@ -73,7 +108,7 @@ local function fillSpanSolid(
     xLeft: number,
     xRight: number,
     width: number,
-    colorU32: number
+    solidBuf: buffer
 )
     local pxLeft = math.max(0, math.ceil(xLeft))
     local pxRight = math.min(width - 1, math.floor(xRight))
@@ -83,7 +118,7 @@ local function fillSpanSolid(
         return
     end
 
-    fillInterior(pixelBuf, rowOffset + pxLeft * 4, span, colorU32)
+    buffer.copy(pixelBuf, rowOffset + pxLeft * 4, solidBuf, 0, span * 4)
 end
 
 -- Signed area coverage for one edge within a single scanline band [yTop, yTop+1].
@@ -286,20 +321,19 @@ local function rasterize(
     end
 
     -- Sort edges by yMin for scanline traversal
-    local edgeIndices = table.create(edgeCount) :: { number }
+    table.clear(scratchEdgeIndices)
 
     for idx = 0, edgeCount - 1 do
-        edgeIndices[idx + 1] = idx
+        scratchEdgeIndices[idx + 1] = idx
     end
 
-    table.sort(edgeIndices, function(a: number, b: number)
-        return buffer.readf32(edgeBuf, a * EDGE_STRIDE) < buffer.readf32(edgeBuf, b * EDGE_STRIDE)
-    end)
+    edgeSortSourceBuf = edgeBuf
+    table.sort(scratchEdgeIndices, compareEdgeIndices)
 
-    local sortedBuf = buffer.create(edgeCount * EDGE_STRIDE)
+    local sortedBuf = ensureSortedEdgeBuf(edgeCount)
 
     for idx = 0, edgeCount - 1 do
-        buffer.copy(sortedBuf, idx * EDGE_STRIDE, edgeBuf, edgeIndices[idx + 1] * EDGE_STRIDE, EDGE_STRIDE)
+        buffer.copy(sortedBuf, idx * EDGE_STRIDE, edgeBuf, scratchEdgeIndices[idx + 1] * EDGE_STRIDE, EDGE_STRIDE)
     end
 
     buffer.copy(edgeBuf, 0, sortedBuf, 0, edgeCount * EDGE_STRIDE)
@@ -311,6 +345,7 @@ local function rasterize(
 
     local colorU32 = rb + gb * 0x100 + bb * 0x10000 + ab * 0x1000000
     local colorRgb = rb + gb * 0x100 + bb * 0x10000
+    local solidBuf = ensureSolidBuf(width, colorU32)
 
     local xBuf = ensureXBuf(math.max(1, edgeCount))
     local rowStride = dstRowStride or (width * 4)
@@ -410,7 +445,7 @@ local function rasterize(
                     end
 
                     local skipTo = findNextEdge(areaBuf, fillBuf, px + 1, scanXMax)
-                    fillInterior(pixelBuf, rowOffset + solidRunStart * 4, skipTo - solidRunStart, colorU32)
+                    buffer.copy(pixelBuf, rowOffset + solidRunStart * 4, solidBuf, 0, (skipTo - solidRunStart) * 4)
                     solidRunStart = -1
                     px = skipTo
                     continue
@@ -426,7 +461,7 @@ local function rasterize(
                 end
 
                 if solidRunStart >= 0 then
-                    fillInterior(pixelBuf, rowOffset + solidRunStart * 4, px - solidRunStart, colorU32)
+                    buffer.copy(pixelBuf, rowOffset + solidRunStart * 4, solidBuf, 0, (px - solidRunStart) * 4)
                     solidRunStart = -1
                 end
 
@@ -439,7 +474,7 @@ local function rasterize(
             end
 
             if solidRunStart >= 0 then
-                fillInterior(pixelBuf, rowOffset + solidRunStart * 4, scanXMax - solidRunStart + 1, colorU32)
+                buffer.copy(pixelBuf, rowOffset + solidRunStart * 4, solidBuf, 0, (scanXMax - solidRunStart + 1) * 4)
             end
 
             prevXMin = scanXMin
@@ -458,7 +493,7 @@ local function rasterize(
             while pair < xCount - 1 do
                 local xLeft = buffer.readf32(xBuf, pair * 4)
                 local xRight = buffer.readf32(xBuf, (pair + 1) * 4)
-                fillSpanSolid(pixelBuf, rowOffset, xLeft, xRight, width, colorU32)
+                fillSpanSolid(pixelBuf, rowOffset, xLeft, xRight, width, solidBuf)
                 pair += 2
             end
 

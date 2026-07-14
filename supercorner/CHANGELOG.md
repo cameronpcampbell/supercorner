@@ -1,3 +1,8 @@
+# v0.1.2
+- Improved rendering performance.
+- Reduced memory allocations during rendering.
+- Improved atlas generation performance.
+
 # v0.1.1
 - Editable and static cache entries now wait 10 seconds after their reference count reaches zero before being deleted.
 - Reusing a pending cache entry cancels its scheduled deletion, and each entry tracks its own deletion task to prevent duplicate timers.

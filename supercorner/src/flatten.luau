@@ -16,7 +16,7 @@ local function createVertexBuf(capacity: number): buffer
 	return buffer.create(capacity * VERTEX_STRIDE)
 end
 
-local function flatten(ops: { SvgOp }, tolerance: number): (buffer, number)
+local function flatten(ops: { SvgOp }, tolerance: number, reuseBuf: buffer?): (buffer, number)
 	-- Estimate vertex count from op types to avoid dynamic resizing.
 	-- Conservative upper bounds: cubics subdivide to at most 2^MAX_DEPTH segments,
 	-- but typical squircle cubics produce ~8-16 vertices; arcs produce ~4-12.
@@ -36,8 +36,16 @@ local function flatten(ops: { SvgOp }, tolerance: number): (buffer, number)
 		end
 	end
 
-	local capacity = math.max(INITIAL_CAPACITY, estimate)
-	local buf = createVertexBuf(capacity)
+	local requiredCapacity = math.max(INITIAL_CAPACITY, estimate)
+	local capacity = if reuseBuf then buffer.len(reuseBuf) // VERTEX_STRIDE else 0
+	local buf: buffer
+
+	if reuseBuf == nil or capacity < requiredCapacity then
+		capacity = requiredCapacity
+		buf = createVertexBuf(capacity)
+	else
+		buf = reuseBuf
+	end
 	local count = 0
 
 	local curX = 0.0

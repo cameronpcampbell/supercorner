@@ -5,20 +5,24 @@
 
         "StarterPlayer": {
             "StarterPlayerScripts": {
-                "Test": {
-                    "$path": "test/test_atlas.client.luau",
+                "Packages": {
+                    "$className": "Folder",
 
-                    "Packages": {
-                        "$className": "Folder",
+                    "supercorner_fusion03": {
+                        "$path": "src"
+                    },
 
-                        "supercorner_fusion03": {
-                            "$path": "src"
-                        },
-
-                        "roblox_packages": {
-                            "$path": "roblox_packages"
-                        }
+                    "roblox_packages": {
+                        "$path": "roblox_packages"
                     }
+                },
+
+                "TestNew": {
+                    "$path": "test/test.client.luau"
+                },
+
+                "TestAtlas": {
+                    "$path": "test/test_atlas.client.luau"
                 }
             }
         }

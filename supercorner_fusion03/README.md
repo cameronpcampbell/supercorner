@@ -28,13 +28,27 @@ local Scope = Scoped(Fusion)
 
 local CornerRadiusState = Scope:Value(24)
 
-Supercorner(Scope, {
+Supercorner.new(Scope, {
     CornerRadius = CornerRadiusState,
     CornerSmoothing = 0.6,
+    MaxCornerRadius = 48,
+    Redrawable = true,
     BackgroundColor3 = Color3.new(1, 1, 1),
     Size = UDim2.fromOffset(200, 200),
 })
 ```
+
+## Reactive Geometry
+
+Set `Redrawable = true` when `CornerRadius`, `CornerSmoothing`, any individual
+corner radius, `PreserveSmoothing`, `AntiAlias`, or `StrokeThickness` is
+reactive. Configure `MaxCornerRadius` or the individual maximum-radius props for
+the largest values the component will display.
+
+Related geometry changes made together are coalesced into one deferred redraw,
+so the component does not rasterize transient combinations of new and old
+values. For predetermined animations between two geometries, prefer
+`Supercorner.atlas` to pre-render discrete keypoints.
 
 ## Fallback Behavior
 

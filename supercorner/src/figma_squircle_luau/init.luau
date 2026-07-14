@@ -7,7 +7,14 @@ local draw = require("./figma_squircle_luau/draw")
 export type FigmaSquircleParams = types.FigmaSquircleParams
 export type SvgOp = types.SvgOp
 
-local function get_svg_path(params: FigmaSquircleParams): { SvgOp }
+local CornerParamsScratch: { types.CornerPathParams } = {
+	{ a = 0, b = 0, c = 0, d = 0, p = 0, cornerRadius = 0, arcSectionLength = 0 },
+	{ a = 0, b = 0, c = 0, d = 0, p = 0, cornerRadius = 0, arcSectionLength = 0 },
+	{ a = 0, b = 0, c = 0, d = 0, p = 0, cornerRadius = 0, arcSectionLength = 0 },
+	{ a = 0, b = 0, c = 0, d = 0, p = 0, cornerRadius = 0, arcSectionLength = 0 },
+}
+
+local function get_svg_path(params: FigmaSquircleParams, reuse_ops: { SvgOp }?): { SvgOp }
 	local width = params.width
 	local height = params.height
 	local corner_smoothing = params.cornerSmoothing
@@ -26,7 +33,7 @@ local function get_svg_path(params: FigmaSquircleParams): { SvgOp }
 		local radius = math.min(tl_radius, budget)
 
 		local path_params = draw.get_path_params_for_corner(
-			radius, corner_smoothing, preserve_smoothing, budget
+			radius, corner_smoothing, preserve_smoothing, budget, CornerParamsScratch[1]
 		)
 
 		return draw.get_svg_ops({
@@ -36,7 +43,7 @@ local function get_svg_path(params: FigmaSquircleParams): { SvgOp }
 			top_right_path_params = path_params,
 			bottom_right_path_params = path_params,
 			bottom_left_path_params = path_params,
-		})
+		}, reuse_ops)
 	end
 
 	local normalized = distribute.distribute_and_normalize(
@@ -45,22 +52,22 @@ local function get_svg_path(params: FigmaSquircleParams): { SvgOp }
 
 	local tl_path_params = draw.get_path_params_for_corner(
 		normalized.topLeft.radius, corner_smoothing, preserve_smoothing,
-		normalized.topLeft.roundingAndSmoothingBudget
+		normalized.topLeft.roundingAndSmoothingBudget, CornerParamsScratch[1]
 	)
 
 	local tr_path_params = draw.get_path_params_for_corner(
 		normalized.topRight.radius, corner_smoothing, preserve_smoothing,
-		normalized.topRight.roundingAndSmoothingBudget
+		normalized.topRight.roundingAndSmoothingBudget, CornerParamsScratch[2]
 	)
 
 	local br_path_params = draw.get_path_params_for_corner(
 		normalized.bottomRight.radius, corner_smoothing, preserve_smoothing,
-		normalized.bottomRight.roundingAndSmoothingBudget
+		normalized.bottomRight.roundingAndSmoothingBudget, CornerParamsScratch[3]
 	)
 
 	local bl_path_params = draw.get_path_params_for_corner(
 		normalized.bottomLeft.radius, corner_smoothing, preserve_smoothing,
-		normalized.bottomLeft.roundingAndSmoothingBudget
+		normalized.bottomLeft.roundingAndSmoothingBudget, CornerParamsScratch[4]
 	)
 
 	return draw.get_svg_ops({
@@ -70,7 +77,7 @@ local function get_svg_path(params: FigmaSquircleParams): { SvgOp }
 		top_right_path_params = tr_path_params,
 		bottom_right_path_params = br_path_params,
 		bottom_left_path_params = bl_path_params,
-	})
+	}, reuse_ops)
 end
 
 return {

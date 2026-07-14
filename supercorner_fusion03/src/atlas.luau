@@ -26,13 +26,14 @@ local function Lerp(a: number, b: number, t: number): number
 end
 
 local function TryCreateAtlas(params: Supercorner.AtlasParams): Supercorner.SupercornerAtlas?
-	local _ok, atlas = pcall(Supercorner.atlas, params)
+	local ok, result = (pcall :: any)(Supercorner.atlas, params)
 
-	if not atlas then
-		warn("[Supercorner Fusion] Failed to create atlas, possibly due to the editable memory budget being reached. Falling back to UICorner.")
+	if not ok then
+		warn(`[Supercorner Fusion] Failed to create atlas. Falling back to UICorner. Error: {result}`)
+		return nil
 	end
 
-	return atlas
+	return result :: Supercorner.SupercornerAtlas
 end
 
 local function AtlasFusion(
@@ -56,7 +57,7 @@ local function AtlasFusion(
 	}
 ): Instance
 	local passthroughProps = Shared.GetPassthroughProps(props, ATLAS_KEYS)
-	local userChildren: Child? = props[Children]
+	local userChildren: Child? = Shared.GetChildren(props)
 	local userRootChildren: Child? = props.RootChildren
 	local peekedStrokeThickness = props.StrokeThickness or 0
 
@@ -146,23 +147,37 @@ local function AtlasFusion(
 	-- Content is constant per atlas
 	local fillContent = fillAtlas:GetContent()
 	local strokeContent = if strokeAtlas then strokeAtlas:GetContent() else nil
+	local fillKeypointCount = fillAtlas:GetKeypointCount()
+	local strokeKeypointCount = if strokeAtlas then strokeAtlas:GetKeypointCount() else 0
+	local lastFillKeypointIndex: number? = nil
+	local lastStrokeKeypointIndex: number? = nil
 
 	-- Update keypoint state from alpha
 	local function UpdateFromAlpha(alpha: number)
 		if fillAtlas then
-			local kp = fillAtlas:GetKeypointFromAlpha(alpha)
-			fillImageRectOffsetState:set(kp.ImageRectOffset)
-			fillImageRectSizeState:set(kp.ImageRectSize)
-			fillSliceCenterState:set(kp.SliceCenter)
-			fillSliceScaleState:set(kp.SliceScale)
+			local keypointIndex = math.clamp(math.round(alpha * (fillKeypointCount - 1)) + 1, 1, fillKeypointCount)
+
+			if keypointIndex ~= lastFillKeypointIndex then
+				local kp = fillAtlas:GetKeypoint(keypointIndex)
+				fillImageRectOffsetState:set(kp.ImageRectOffset)
+				fillImageRectSizeState:set(kp.ImageRectSize)
+				fillSliceCenterState:set(kp.SliceCenter)
+				fillSliceScaleState:set(kp.SliceScale)
+				lastFillKeypointIndex = keypointIndex
+			end
 		end
 
 		if strokeAtlas then
-			local kp = strokeAtlas:GetKeypointFromAlpha(alpha)
-			strokeImageRectOffsetState:set(kp.ImageRectOffset)
-			strokeImageRectSizeState:set(kp.ImageRectSize)
-			strokeSliceCenterState:set(kp.SliceCenter)
-			strokeSliceScaleState:set(kp.SliceScale)
+			local keypointIndex = math.clamp(math.round(alpha * (strokeKeypointCount - 1)) + 1, 1, strokeKeypointCount)
+
+			if keypointIndex ~= lastStrokeKeypointIndex then
+				local kp = strokeAtlas:GetKeypoint(keypointIndex)
+				strokeImageRectOffsetState:set(kp.ImageRectOffset)
+				strokeImageRectSizeState:set(kp.ImageRectSize)
+				strokeSliceCenterState:set(kp.SliceCenter)
+				strokeSliceScaleState:set(kp.SliceScale)
+				lastStrokeKeypointIndex = keypointIndex
+			end
 		end
 	end
 
@@ -183,7 +198,10 @@ local function AtlasFusion(
 	end)
 
 	-- Build instance tree
-	local fillChild = scope:New("ImageLabel") {
+	-- Solver V2 loses Fusion's constructors from the inferred inner-scope type.
+	local imageScope: Scope = Fusion.innerScope(scope) :: any
+
+	local fillChild = imageScope:New("ImageLabel") {
 		Name = "Fill",
 		ImageContent = fillContent,
 		ImageRectOffset = fillImageRectOffsetState,
@@ -207,7 +225,7 @@ local function AtlasFusion(
 			strokeChildren = { StrokeGradient = props.StrokeGradient }
 		end
 
-		strokeChild = scope:New("ImageLabel") {
+		strokeChild = imageScope:New("ImageLabel") {
 			Name = "Stroke",
 			ImageContent = strokeContent,
 			ImageRectOffset = strokeImageRectOffsetState,
@@ -224,7 +242,7 @@ local function AtlasFusion(
 		}
 	end
 
-	local imageFolder = scope:New("Folder") {
+	local imageFolder = imageScope:New("Folder") {
 		Name = "SupercornerImages",
 
 		[Children] = ({
@@ -238,7 +256,7 @@ local function AtlasFusion(
 	local rootChildren: { [any]: any } = {
 		imageFolder,
 		contentFrame,
-		[Children] = userRootChildren,
+		userRootChildren,
 	}
 
 	local rootProps: { [any]: any } = {

@@ -18,7 +18,8 @@ local function get_path_params_for_corner(
 	corner_radius: number,
 	corner_smoothing: number,
 	preserve_smoothing: boolean,
-	rounding_and_smoothing_budget: number
+	rounding_and_smoothing_budget: number,
+	reuse_result: CornerPathParams?
 ): CornerPathParams
 	local smoothing = corner_smoothing
 
@@ -53,15 +54,18 @@ local function get_path_params_for_corner(
 		p = math.min(p, rounding_and_smoothing_budget)
 	end
 
-	return {
-		a = a,
-		b = b,
-		c = c,
-		d = d,
-		p = p,
-		cornerRadius = corner_radius,
-		arcSectionLength = arc_section_length,
-	}
+	if reuse_result then
+		reuse_result.a = a
+		reuse_result.b = b
+		reuse_result.c = c
+		reuse_result.d = d
+		reuse_result.p = p
+		reuse_result.cornerRadius = corner_radius
+		reuse_result.arcSectionLength = arc_section_length
+		return reuse_result
+	end
+
+	return { a = a, b = b, c = c, d = d, p = p, cornerRadius = corner_radius, arcSectionLength = arc_section_length }
 end
 
 -- Inserts the 3 corner ops (cubic, arc, cubic) directly into the ops array.
@@ -101,7 +105,7 @@ local function insert_corner_ops(ops: { SvgOp }, pp: CornerPathParams, corner: n
 	end
 end
 
-local function get_svg_ops(input: SvgPathInput): { SvgOp }
+local function get_svg_ops(input: SvgPathInput, reuse_ops: { SvgOp }?): { SvgOp }
 	local width = input.width
 	local height = input.height
 	local tl = input.top_left_path_params
@@ -109,7 +113,14 @@ local function get_svg_ops(input: SvgPathInput): { SvgOp }
 	local br = input.bottom_right_path_params
 	local bl = input.bottom_left_path_params
 
-	local ops: { SvgOp } = table.create(21) :: { SvgOp }
+	local ops: { SvgOp }
+
+	if reuse_ops then
+		table.clear(reuse_ops)
+		ops = reuse_ops
+	else
+		ops = table.create(21) :: { SvgOp }
+	end
 
 	table.insert(ops, { type = "M" :: "M", x = tl.p, y = 0 })
 	table.insert(ops, { type = "L" :: "L", x = width - tr.p, y = 0 })

@@ -11,7 +11,7 @@ local AtlasFusion = require(script.atlas)
 type Scope = Fusion.Scope<typeof(Fusion)>
 type UsedAs<T> = Fusion.UsedAs<T>
 type Child = Fusion.Child
-type Geometry = {
+type ShapeGeometry = {
 	CornerRadius: number?,
 	CornerSmoothing: number?,
 	TopLeftRadius: number?,
@@ -20,10 +20,14 @@ type Geometry = {
 	BottomLeftRadius: number?,
 	PreserveSmoothing: boolean?,
 	AntiAlias: boolean?,
-	StrokeThickness: number?,
 }
 
 local CREATE_ONLY_PROPS = { "MaxCornerRadius", "MaxTopLeftRadius", "MaxTopRightRadius", "MaxBottomRightRadius", "MaxBottomLeftRadius", "Redrawable" }
+local REDRAW_PROPS = {
+	"CornerRadius", "CornerSmoothing",
+	"TopLeftRadius", "TopRightRadius", "BottomRightRadius", "BottomLeftRadius",
+	"PreserveSmoothing", "AntiAlias", "StrokeThickness",
+}
 
 local SUPERCORNER_KEYS = {
 	CornerRadius = true, CornerSmoothing = true,
@@ -40,7 +44,7 @@ local SUPERCORNER_KEYS = {
 }
 
 local function TryCreateSupercorner(props: { [any]: any }, stroke: number): Supercorner.Supercorner?
-	local _ok, supercorner = pcall(Supercorner.new, {
+	local ok, result = (pcall :: any)(Supercorner.new, {
 		CornerRadius = Peek<<number?>>(props.CornerRadius),
 		CornerSmoothing = Peek<<number?>>(props.CornerSmoothing),
 		TopLeftRadius = Peek<<number?>>(props.TopLeftRadius),
@@ -58,22 +62,33 @@ local function TryCreateSupercorner(props: { [any]: any }, stroke: number): Supe
 		Stroke = stroke,
 	})
 
-	if not supercorner then
-		warn("[Supercorner Fusion] Failed to create Supercorner, possibly due to the editable memory budget being reached. Falling back to UICorner.")
+	if not ok then
+		warn(`[Supercorner Fusion] Failed to create Supercorner. Falling back to UICorner. Error: {result}`)
+		return nil
 	end
 
-	return supercorner
+	return result :: Supercorner.Supercorner
 end
 
 local function UpdateSupercornerValues(
 	sc: Supercorner.Supercorner,
-	contentState: Fusion.Value<Content?>,
-	sliceCenterState: Fusion.Value<Rect?>,
-	sliceScaleState: Fusion.Value<number?>
+	contentState: Fusion.Value<Content>,
+	sliceCenterState: Fusion.Value<Rect>,
+	sliceScaleState: Fusion.Value<number>,
+	hasContentState: Fusion.Value<boolean>
 )
 	sliceCenterState:set(sc:GetSliceCenter())
 	sliceScaleState:set(sc:GetSliceScale())
 	contentState:set(sc:GetContent())
+	hasContentState:set(true)
+end
+
+local function ClearSupercornerValues(
+	contentState: Fusion.Value<Content>,
+	hasContentState: Fusion.Value<boolean>
+)
+	hasContentState:set(false)
+	contentState:set(Content.none)
 end
 
 local function SupercornerFusion(
@@ -105,7 +120,7 @@ local function SupercornerFusion(
 	}
 ): Instance
 	local passthroughProps = Shared.GetPassthroughProps(props, SUPERCORNER_KEYS)
-	local userChildren: Child? = props[Children]
+	local userChildren: Child? = Shared.GetChildren(props)
 	local userRootChildren: Child? = props.RootChildren
 
 	-- Warn if create-only props change
@@ -124,16 +139,37 @@ local function SupercornerFusion(
 		end)
 	end
 
+	local isRedrawable = Peek<<boolean>>(props.Redrawable or false) :: boolean
+	local reactiveRedrawProp: string? = nil
+
+	for _, propName in REDRAW_PROPS do
+		if typeof(props[propName]) == "table" then
+			reactiveRedrawProp = propName
+			break
+		end
+	end
+
+	if reactiveRedrawProp ~= nil and not isRedrawable then
+		warn(
+			`[Supercorner Fusion] '{reactiveRedrawProp}' is reactive, but this component is not redrawable. `
+				.. "Pass `Redrawable = true` and configure the maximum corner radii to apply reactive geometry updates."
+		)
+	end
+
 	-- Derived state
 	local computeNeedsFill = scope:Computed(function(use: Fusion.Use): boolean
 		return (use<<number>>(props.BackgroundTransparency or 0) :: number) ~= 1
 	end)
 
-	local computeNeedsStroke = scope:Computed(function(use: Fusion.Use): boolean
-		return (use<<number>>(props.StrokeThickness or 0) :: number) > 0
+	local computeStrokeThickness = scope:Computed(function(use: Fusion.Use): number
+		return use<<number>>(props.StrokeThickness or 0) :: number
 	end)
 
-	local computeGeometry = scope:Computed(function(use: Fusion.Use): Geometry
+	local computeNeedsStroke = scope:Computed(function(use: Fusion.Use): boolean
+		return (use<<number>>(computeStrokeThickness) :: number) > 0
+	end)
+
+	local computeShapeGeometry = scope:Computed(function(use: Fusion.Use): ShapeGeometry
 		return {
 			CornerRadius = if props.CornerRadius == nil then nil else (use<<number>>(props.CornerRadius) :: number),
 			CornerSmoothing = if props.CornerSmoothing == nil then nil else (use<<number>>(props.CornerSmoothing) :: number),
@@ -143,18 +179,19 @@ local function SupercornerFusion(
 			BottomLeftRadius = if props.BottomLeftRadius == nil then nil else (use<<number>>(props.BottomLeftRadius) :: number),
 			PreserveSmoothing = if props.PreserveSmoothing == nil then nil else (use<<boolean>>(props.PreserveSmoothing) :: boolean),
 			AntiAlias = if props.AntiAlias == nil then nil else (use<<boolean>>(props.AntiAlias) :: boolean),
-			StrokeThickness = if props.StrokeThickness == nil then nil else (use<<number>>(props.StrokeThickness) :: number),
 		}
 	end)
 
 	-- Supercorner instance state
-	local fillContentState = scope:Value(nil :: Content?)
-	local fillSliceCenterState = scope:Value(nil :: Rect?)
-	local fillSliceScaleState = scope:Value(nil :: number?)
+	local fillContentState = scope:Value(Content.none)
+	local fillSliceCenterState = scope:Value(Rect.new(0, 0, 0, 0))
+	local fillSliceScaleState = scope:Value(0.5)
+	local fillHasContentState = scope:Value(false)
 
-	local strokeContentState = scope:Value(nil :: Content?)
-	local strokeSliceCenterState = scope:Value(nil :: Rect?)
-	local strokeSliceScaleState = scope:Value(nil :: number?)
+	local strokeContentState = scope:Value(Content.none)
+	local strokeSliceCenterState = scope:Value(Rect.new(0, 0, 0, 0))
+	local strokeSliceScaleState = scope:Value(0.5)
+	local strokeHasContentState = scope:Value(false)
 
 	local fillSC: Supercorner.Supercorner? = nil
 	local strokeSC: Supercorner.Supercorner? = nil
@@ -166,7 +203,7 @@ local function SupercornerFusion(
 		fillSC = TryCreateSupercorner(props, 0)
 
 		if fillSC then
-			UpdateSupercornerValues(fillSC, fillContentState, fillSliceCenterState, fillSliceScaleState)
+			UpdateSupercornerValues(fillSC, fillContentState, fillSliceCenterState, fillSliceScaleState, fillHasContentState)
 		else
 			useFallback = true
 		end
@@ -177,13 +214,14 @@ local function SupercornerFusion(
 		strokeSC = TryCreateSupercorner(props, peekedStrokeThickness)
 
 		if strokeSC then
-			UpdateSupercornerValues(strokeSC, strokeContentState, strokeSliceCenterState, strokeSliceScaleState)
+			UpdateSupercornerValues(strokeSC, strokeContentState, strokeSliceCenterState, strokeSliceScaleState, strokeHasContentState)
 		else
 			useFallback = true
 
 			if fillSC then
 				fillSC:Destroy()
 				fillSC = nil
+				ClearSupercornerValues(fillContentState, fillHasContentState)
 			end
 		end
 	end
@@ -224,49 +262,105 @@ local function SupercornerFusion(
 		}, props.Button, userRootChildren)
 	end
 
-	-- Geometry change observer — redraw on prop changes
-	scope:Observer(computeGeometry):onChange(function()
-		local geo = Peek<<Geometry>>(computeGeometry) :: Geometry
+	-- Coalesce related prop updates so transient geometry combinations are not rasterized.
+	local pendingRedrawThread: thread? = nil
+	local pendingFillRedraw = false
+	local pendingStrokeRedraw = false
+	local isDestroyed = false
 
-		if fillSC then
-			local ok, err = (pcall :: any)(fillSC.Redraw, fillSC, {
-				CornerRadius = geo.CornerRadius,
-				CornerSmoothing = geo.CornerSmoothing,
-				TopLeftRadius = geo.TopLeftRadius,
-				TopRightRadius = geo.TopRightRadius,
-				BottomRightRadius = geo.BottomRightRadius,
-				BottomLeftRadius = geo.BottomLeftRadius,
-				PreserveSmoothing = geo.PreserveSmoothing,
-				AntiAlias = geo.AntiAlias,
-			})
+	local function ScheduleRedraw(redrawFill: boolean, redrawStroke: boolean)
+		pendingFillRedraw = pendingFillRedraw or redrawFill
+		pendingStrokeRedraw = pendingStrokeRedraw or redrawStroke
 
-			if ok then
-				UpdateSupercornerValues(fillSC, fillContentState, fillSliceCenterState, fillSliceScaleState)
-			else
-				warn(`[Supercorner Fusion] Failed to redraw Supercorner. Make sure the component was created with \`Redrawable = true\`. Error: {err}`)
+		if pendingRedrawThread ~= nil then return end
+
+		local redrawThread: thread
+		redrawThread = task.defer(function()
+			if pendingRedrawThread ~= redrawThread then return end
+
+			pendingRedrawThread = nil
+
+			local shouldRedrawFill = pendingFillRedraw
+			local shouldRedrawStroke = pendingStrokeRedraw
+			pendingFillRedraw = false
+			pendingStrokeRedraw = false
+
+			if isDestroyed then return end
+
+			local geo = Peek<<ShapeGeometry>>(computeShapeGeometry) :: ShapeGeometry
+
+			if shouldRedrawFill and fillSC then
+				local ok, err = (pcall :: any)(fillSC.Redraw, fillSC, {
+					CornerRadius = geo.CornerRadius,
+					CornerSmoothing = geo.CornerSmoothing,
+					TopLeftRadius = geo.TopLeftRadius,
+					TopRightRadius = geo.TopRightRadius,
+					BottomRightRadius = geo.BottomRightRadius,
+					BottomLeftRadius = geo.BottomLeftRadius,
+					PreserveSmoothing = geo.PreserveSmoothing,
+					AntiAlias = geo.AntiAlias,
+				})
+
+				if ok then
+					UpdateSupercornerValues(
+						fillSC,
+						fillContentState,
+						fillSliceCenterState,
+						fillSliceScaleState,
+						fillHasContentState
+					)
+				else
+					warn(`[Supercorner Fusion] Failed to redraw Supercorner. Error: {err}`)
+				end
 			end
-		end
 
-		if strokeSC then
-			local ok, err = (pcall :: any)(strokeSC.Redraw, strokeSC, {
-				CornerRadius = geo.CornerRadius,
-				CornerSmoothing = geo.CornerSmoothing,
-				TopLeftRadius = geo.TopLeftRadius,
-				TopRightRadius = geo.TopRightRadius,
-				BottomRightRadius = geo.BottomRightRadius,
-				BottomLeftRadius = geo.BottomLeftRadius,
-				PreserveSmoothing = geo.PreserveSmoothing,
-				AntiAlias = geo.AntiAlias,
-				Stroke = geo.StrokeThickness,
-			})
+			if shouldRedrawStroke and strokeSC then
+				local ok, err = (pcall :: any)(strokeSC.Redraw, strokeSC, {
+					CornerRadius = geo.CornerRadius,
+					CornerSmoothing = geo.CornerSmoothing,
+					TopLeftRadius = geo.TopLeftRadius,
+					TopRightRadius = geo.TopRightRadius,
+					BottomRightRadius = geo.BottomRightRadius,
+					BottomLeftRadius = geo.BottomLeftRadius,
+					PreserveSmoothing = geo.PreserveSmoothing,
+					AntiAlias = geo.AntiAlias,
+					Stroke = Peek<<number>>(computeStrokeThickness) :: number,
+				})
 
-			if ok then
-				UpdateSupercornerValues(strokeSC, strokeContentState, strokeSliceCenterState, strokeSliceScaleState)
-			else
-				warn(`[Supercorner Fusion] Failed to redraw stroke Supercorner. Make sure the component was created with \`Redrawable = true\`. Error: {err}`)
+				if ok then
+					UpdateSupercornerValues(
+						strokeSC,
+						strokeContentState,
+						strokeSliceCenterState,
+						strokeSliceScaleState,
+						strokeHasContentState
+					)
+				else
+					warn(`[Supercorner Fusion] Failed to redraw stroke Supercorner. Error: {err}`)
+				end
 			end
-		end
-	end)
+		end)
+
+		pendingRedrawThread = redrawThread
+	end
+
+	if isRedrawable then
+		scope:Observer(computeShapeGeometry):onChange(function()
+			ScheduleRedraw(true, true)
+		end)
+
+		local previousStrokeThickness = Peek<<number>>(computeStrokeThickness) :: number
+
+		scope:Observer(computeStrokeThickness):onChange(function()
+			local strokeThickness = Peek<<number>>(computeStrokeThickness) :: number
+
+			if previousStrokeThickness > 0 and strokeThickness > 0 then
+				ScheduleRedraw(false, true)
+			end
+
+			previousStrokeThickness = strokeThickness
+		end)
+	end
 
 	-- Fill toggle observer
 	scope:Observer(computeNeedsFill):onChange(function()
@@ -275,15 +369,23 @@ local function SupercornerFusion(
 		if peekedNeedsFill and not fillSC then
 			local newFillSC = TryCreateSupercorner(props, 0)
 			fillSC = newFillSC
+			pendingFillRedraw = false
 
 			if newFillSC then
-				UpdateSupercornerValues(newFillSC, fillContentState, fillSliceCenterState, fillSliceScaleState)
+				UpdateSupercornerValues(
+					newFillSC,
+					fillContentState,
+					fillSliceCenterState,
+					fillSliceScaleState,
+					fillHasContentState
+				)
 			end
 
 		elseif not peekedNeedsFill and fillSC then
 			fillSC:Destroy()
 			fillSC = nil
-			fillContentState:set(nil)
+			pendingFillRedraw = false
+			ClearSupercornerValues(fillContentState, fillHasContentState)
 		end
 	end)
 
@@ -295,32 +397,51 @@ local function SupercornerFusion(
 			local peekedStrokeThickness = Peek<<number>>(props.StrokeThickness or 0) :: number
 			local newStrokeSC = TryCreateSupercorner(props, peekedStrokeThickness)
 			strokeSC = newStrokeSC
+			pendingStrokeRedraw = false
 
 			if newStrokeSC then
-				UpdateSupercornerValues(newStrokeSC, strokeContentState, strokeSliceCenterState, strokeSliceScaleState)
+				UpdateSupercornerValues(
+					newStrokeSC,
+					strokeContentState,
+					strokeSliceCenterState,
+					strokeSliceScaleState,
+					strokeHasContentState
+				)
 			end
 
 		elseif not peekedNeedsStroke and strokeSC then
 			strokeSC:Destroy()
 			strokeSC = nil
-			strokeContentState:set(nil)
+			pendingStrokeRedraw = false
+			ClearSupercornerValues(strokeContentState, strokeHasContentState)
 		end
 	end)
 
 	-- Cleanup
 	table.insert(scope, function()
+		isDestroyed = true
+		pendingFillRedraw = false
+		pendingStrokeRedraw = false
+
+		if pendingRedrawThread then
+			task.cancel(pendingRedrawThread)
+			pendingRedrawThread = nil
+		end
+
 		if fillSC then fillSC:Destroy(); fillSC = nil end
 		if strokeSC then strokeSC:Destroy(); strokeSC = nil end
 	end)
 
 	-- Build instance tree
-	local computeFillChild = scope:Computed(function(use, innerScope: Fusion.Scope): Instance?
-		local usedContent = use<<Content?>>(fillContentState)
-		if usedContent == nil then return nil end
+	-- Solver V2 loses Fusion's constructors from the inferred inner-scope type.
+	local imageScope: Scope = Fusion.innerScope(scope) :: any
+
+	local computeFillChild = imageScope:Computed(function(use, innerScope: Scope): Instance?
+		if not (use<<boolean>>(fillHasContentState) :: boolean) then return nil end
 
 		return innerScope:New("ImageLabel") {
 			Name = "Fill",
-			ImageContent = usedContent,
+			ImageContent = fillContentState,
 			ScaleType = Enum.ScaleType.Slice,
 			SliceCenter = fillSliceCenterState,
 			SliceScale = fillSliceScaleState,
@@ -332,9 +453,8 @@ local function SupercornerFusion(
 		}
 	end)
 
-	local computeStrokeChild = scope:Computed(function(use, innerScope: Fusion.Scope): Instance?
-		local usedContent = use<<Content?>>(strokeContentState)
-		if usedContent == nil then return nil end
+	local computeStrokeChild = imageScope:Computed(function(use, innerScope: Scope): Instance?
+		if not (use<<boolean>>(strokeHasContentState) :: boolean) then return nil end
 
 		local strokeChildren: { [any]: any }? = nil
 
@@ -344,7 +464,7 @@ local function SupercornerFusion(
 
 		return innerScope:New("ImageLabel") {
 			Name = "Stroke",
-			ImageContent = usedContent,
+			ImageContent = strokeContentState,
 			ScaleType = Enum.ScaleType.Slice,
 			SliceCenter = strokeSliceCenterState,
 			SliceScale = strokeSliceScaleState,
@@ -357,7 +477,7 @@ local function SupercornerFusion(
 		}
 	end)
 
-	local imageFolder = scope:New("Folder") {
+	local imageFolder = imageScope:New("Folder") {
 		Name = "SupercornerImages",
 
 		[Children] = {
@@ -371,7 +491,7 @@ local function SupercornerFusion(
 	local rootChildren: { [any]: any } = {
 		imageFolder,
 		contentFrame,
-		[Children] = userRootChildren,
+		userRootChildren,
 	}
 
 	local rootProps: { [any]: any } = {

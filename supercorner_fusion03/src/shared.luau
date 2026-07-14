@@ -30,6 +30,15 @@ local NON_PASSTHROUGH_KEYS = {
 	BackgroundTransparency = true,
 }
 
+local function IsChildrenKey(key: any): boolean
+	if key == Children then return true end
+	if typeof(key) ~= "table" then return false end
+
+	-- Consumers can provide Children from a different Fusion module instance.
+	-- Match the public SpecialKey metadata instead of relying on table identity.
+	return key.type == "SpecialKey" and key.kind == "Children"
+end
+
 local UICORNER_HAS_INDIVIDUAL_RADII = (function()
 	local reflectionService = game:GetService("ReflectionService")
 	local reflection: { [any]: any } = reflectionService:GetPropertiesOfClass("UICorner")
@@ -43,7 +52,7 @@ local function GetPassthroughProps(props: { [any]: any }, supercornerKeys: { [st
 	local result = {}
 
 	for key, value in props do
-		if key == Children then continue end
+		if IsChildrenKey(key) then continue end
 		if supercornerKeys[key] then continue end
 		if NON_PASSTHROUGH_KEYS[key] then continue end
 
@@ -51,6 +60,21 @@ local function GetPassthroughProps(props: { [any]: any }, supercornerKeys: { [st
 	end
 
 	return result
+end
+
+local function GetChildren(props: { [any]: any }): Child?
+	local children: { Child } = {}
+
+	for key, value in props do
+		if IsChildrenKey(key) then
+			table.insert(children, value :: Child)
+		end
+	end
+
+	if #children == 0 then return nil end
+	if #children == 1 then return children[1] end
+
+	return Fusion.Child(children)
 end
 
 local function RenderRoot(
@@ -144,37 +168,40 @@ local function RenderClippedCornersFallback(
 	button: boolean?,
 	rootChildren: Child?
 ): Instance
+	-- Solver V2 loses Fusion's constructors from the inferred inner-scope type.
+	local graphicsScope: Scope = Fusion.innerScope(scope) :: any
+
 	local rootProps: { [any]: any } = {
 		BackgroundTransparency = 1,
 
 		[Children] = {
 			TopLeftClip = CreateCornerClip(
-				scope, radii.topLeft,
+				graphicsScope, radii.topLeft,
 				UDim2.new(0, 0, 0, 0), UDim2.new(0, 0, 0, 0),
 				visual
 			),
 
 			TopRightClip = CreateCornerClip(
-				scope, radii.topRight,
+				graphicsScope, radii.topRight,
 				UDim2.new(0.5, 0, 0, 0), UDim2.new(-1, 0, 0, 0),
 				visual
 			),
 
 			BottomLeftClip = CreateCornerClip(
-				scope, radii.bottomLeft,
+				graphicsScope, radii.bottomLeft,
 				UDim2.new(0, 0, 0.5, 0), UDim2.new(0, 0, -1, 0),
 				visual
 			),
 
 			BottomRightClip = CreateCornerClip(
-				scope, radii.bottomRight,
+				graphicsScope, radii.bottomRight,
 				UDim2.new(0.5, 0, 0.5, 0), UDim2.new(-1, 0, -1, 0),
 				visual
 			),
 
 			Content = CreateContentFrame(scope, userChildren),
 
-			[Children] = rootChildren,
+			rootChildren,
 		},
 	}
 
@@ -194,31 +221,33 @@ local function RenderFallback(
 	button: boolean?,
 	rootChildren: Child?
 ): Instance
-	local needsStroke = scope:Computed(function(use: Fusion.Use): boolean
-		return (use<<number>>(visual.strokeThickness or 0) :: number) > 0
-	end)
-
 	if UICORNER_HAS_INDIVIDUAL_RADII then
+		-- Solver V2 loses Fusion's constructors from the inferred inner-scope type.
+		local graphicsScope: Scope = Fusion.innerScope(scope) :: any
+		local needsStroke = graphicsScope:Computed(function(use: Fusion.Use): boolean
+			return (use<<number>>(visual.strokeThickness or 0) :: number) > 0
+		end)
+
 		local allChildren: { [any]: any } = {
-			UICorner = scope:New("UICorner") {
-				TopLeftRadius = scope:Computed(function(use: Fusion.Use): UDim
+			UICorner = graphicsScope:New("UICorner") {
+				TopLeftRadius = graphicsScope:Computed(function(use: Fusion.Use): UDim
 					return UDim.new(0, use<<number>>(radii.topLeft) :: number)
 				end),
 
-				TopRightRadius = scope:Computed(function(use: Fusion.Use): UDim
+				TopRightRadius = graphicsScope:Computed(function(use: Fusion.Use): UDim
 					return UDim.new(0, use<<number>>(radii.topRight) :: number)
 				end),
 
-				BottomRightRadius = scope:Computed(function(use: Fusion.Use): UDim
+				BottomRightRadius = graphicsScope:Computed(function(use: Fusion.Use): UDim
 					return UDim.new(0, use<<number>>(radii.bottomRight) :: number)
 				end),
 
-				BottomLeftRadius = scope:Computed(function(use: Fusion.Use): UDim
+				BottomLeftRadius = graphicsScope:Computed(function(use: Fusion.Use): UDim
 					return UDim.new(0, use<<number>>(radii.bottomLeft) :: number)
 				end),
 			},
 
-			UIStroke = scope:Computed(function(use: Fusion.Use, innerScope: Fusion.Scope): Instance?
+			UIStroke = graphicsScope:Computed(function(use: Fusion.Use, innerScope: Scope): Instance?
 				if not (use<<boolean>>(needsStroke) :: boolean) then return nil end
 
 				local strokeChildren: { [any]: any }? = nil
@@ -239,7 +268,7 @@ local function RenderFallback(
 
 			Content = CreateContentFrame(scope, userChildren),
 
-			[Children] = rootChildren,
+			rootChildren,
 		}
 
 		local rootProps: { [any]: any } = {
@@ -263,6 +292,7 @@ return {
 	NON_PASSTHROUGH_KEYS = NON_PASSTHROUGH_KEYS,
 	UICORNER_HAS_INDIVIDUAL_RADII = UICORNER_HAS_INDIVIDUAL_RADII,
 	CreateContentFrame = CreateContentFrame,
+	GetChildren = GetChildren,
 	GetPassthroughProps = GetPassthroughProps,
 	RenderRoot = RenderRoot,
 	RenderFallback = RenderFallback,
