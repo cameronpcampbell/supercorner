@@ -50,6 +50,12 @@ so the component does not rasterize transient combinations of new and old
 values. For predetermined animations between two geometries, prefer
 `Supercorner.atlas` to pre-render discrete keypoints.
 
+When all four effective corner radii are `0` and `Redrawable` is false,
+`Supercorner.new` renders the shape with a regular `Frame` and an optional
+`UIStroke`. This avoids allocating image content for a rectangular shape.
+Fill color/transparency and stroke thickness/color/transparency remain reactive
+in this mode; a fully transparent fill produces a hollow frame.
+
 ## Fallback Behavior
 
 If Supercorner fails to create (e.g. the editable memory budget is exhausted), the component automatically falls back to a standard `UICorner`.

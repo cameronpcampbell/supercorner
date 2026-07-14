@@ -91,6 +91,16 @@ local function ClearSupercornerValues(
 	contentState:set(Content.none)
 end
 
+local function HasZeroCornerRadii(props: { [any]: any }): boolean
+	local defaultRadius = Peek<<number>>(props.CornerRadius or 0) :: number
+
+	return
+		(Peek<<number>>(props.TopLeftRadius or defaultRadius) :: number) == 0
+		and (Peek<<number>>(props.TopRightRadius or defaultRadius) :: number) == 0
+		and (Peek<<number>>(props.BottomRightRadius or defaultRadius) :: number) == 0
+		and (Peek<<number>>(props.BottomLeftRadius or defaultRadius) :: number) == 0
+end
+
 local function SupercornerFusion(
 	scope: Scope,
 	props: {
@@ -140,9 +150,12 @@ local function SupercornerFusion(
 	end
 
 	local isRedrawable = Peek<<boolean>>(props.Redrawable or false) :: boolean
+	local useSquareRenderer = not isRedrawable and HasZeroCornerRadii(props)
 	local reactiveRedrawProp: string? = nil
 
 	for _, propName in REDRAW_PROPS do
+		if useSquareRenderer and propName == "StrokeThickness" then continue end
+
 		if typeof(props[propName]) == "table" then
 			reactiveRedrawProp = propName
 			break
@@ -154,6 +167,23 @@ local function SupercornerFusion(
 			`[Supercorner Fusion] '{reactiveRedrawProp}' is reactive, but this component is not redrawable. `
 				.. "Pass `Redrawable = true` and configure the maximum corner radii to apply reactive geometry updates."
 		)
+	end
+
+	if useSquareRenderer then
+		local strokeGradient: Instance? = nil
+
+		if props.StrokeGradient ~= nil then
+			strokeGradient = Peek<<Instance>>(props.StrokeGradient) :: Instance
+		end
+
+		return Shared.RenderSquare(scope, passthroughProps, userChildren, {
+			bgColor = props.BackgroundColor3,
+			bgTransparency = props.BackgroundTransparency,
+			strokeThickness = props.StrokeThickness,
+			strokeColor = props.StrokeColor,
+			strokeTransparency = props.StrokeTransparency,
+			strokeGradient = strokeGradient,
+		}, props.Button, userRootChildren)
 	end
 
 	-- Derived state

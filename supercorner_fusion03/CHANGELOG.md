@@ -1,4 +1,5 @@
 # v0.1.2
+- Avoided allocating editable or static image content for non-redrawable supercorners whose effective corner radii are all zero; these now use a `Frame` and optional `UIStroke`.
 - Improved rendering and atlas performance.
 - Reduced unnecessary reactive redraws.
 - Added reactive `StrokeThickness` updates.
