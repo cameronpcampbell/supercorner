@@ -1,3 +1,7 @@
+# v0.1.3
+- Added `ForceSupercorner` to opt zero-radius components out of the `Frame` fill optimization.
+- Zero-radius optimized components now always render visible strokes with Supercorner.
+
 # v0.1.2
 - Avoided allocating editable or static image content for non-redrawable supercorners whose effective corner radii are all zero; these now use a `Frame` and optional `UIStroke`.
 - Improved rendering and atlas performance.

@@ -18,7 +18,6 @@ local CornerSmoothingState = Scope:Value(1)
 local BackgroundTransparencyState = Scope:Value(0.5)
 local StrokeThicknessState = Scope:Value(5)
 local SquareBackgroundTransparencyState = Scope:Value(0.25)
-local SquareStrokeThicknessState = Scope:Value(4)
 
 local ContentChild = Scope:New("Frame") {
 	Name = "RegularChild",
@@ -54,16 +53,13 @@ local SquareStrokeGradient = Scope:New("UIGradient") {
 	Color = ColorSequence.new(Color3.new(1, 0, 0), Color3.new(0, 0, 1)),
 }
 
-local editableCacheBeforeSquares = RasterSupercorner.GetCacheSize()
-local staticCacheBeforeSquares = RasterSupercorner.GetStaticCacheSize()
-
 local SquareRoot = Supercorner.new(Scope, {
 	CornerRadius = 0,
 	Size = UDim2.fromOffset(100, 100),
 	Visible = false,
 	BackgroundColor3 = Color3.new(0.25, 0.5, 0.75),
 	BackgroundTransparency = SquareBackgroundTransparencyState,
-	StrokeThickness = SquareStrokeThicknessState,
+	StrokeThickness = 4,
 	StrokeColor = Color3.new(0.75, 0.5, 0.25),
 	StrokeTransparency = 0.125,
 	StrokeGradient = SquareStrokeGradient,
@@ -100,6 +96,9 @@ local OverriddenSquareRoot = Supercorner.new(Scope, {
 	BackgroundTransparency = 1,
 })
 
+local editableCacheBeforeFillOnlySquare = RasterSupercorner.GetCacheSize()
+local staticCacheBeforeFillOnlySquare = RasterSupercorner.GetStaticCacheSize()
+
 local SquareButtonRoot = Supercorner.new(Scope, {
 	Button = true,
 	Size = UDim2.fromOffset(100, 100),
@@ -107,13 +106,20 @@ local SquareButtonRoot = Supercorner.new(Scope, {
 })
 
 assert(
-	RasterSupercorner.GetCacheSize() == editableCacheBeforeSquares,
-	"Static zero-radius supercorners must not allocate editable image cache entries"
+	RasterSupercorner.GetCacheSize() == editableCacheBeforeFillOnlySquare,
+	"A static zero-radius fill-only square must not allocate editable image cache entries"
 )
 assert(
-	RasterSupercorner.GetStaticCacheSize() == staticCacheBeforeSquares,
-	"Static zero-radius supercorners must not allocate static image cache entries"
+	RasterSupercorner.GetStaticCacheSize() == staticCacheBeforeFillOnlySquare,
+	"A static zero-radius fill-only square must not allocate static image cache entries"
 )
+
+local ForcedSquareRoot = Supercorner.new(Scope, {
+	CornerRadius = 0,
+	ForceSupercorner = true,
+	Size = UDim2.fromOffset(100, 100),
+	Visible = false,
+})
 
 local NonSquareCornerRoot = Supercorner.new(Scope, {
 	CornerRadius = 0,
@@ -185,12 +191,19 @@ local function GetSquareFill(root: Instance): Frame
 
 	local fill = graphics:FindFirstChild("Fill")
 	assert(fill ~= nil and fill:IsA("Frame"), "Optimized square fill must use a Frame")
-	assert(
-		root:FindFirstChildWhichIsA("ImageLabel", true) == nil,
-		"Optimized square must not contain image renderers"
-	)
 
 	return fill :: Frame
+end
+
+local function GetSupercornerStroke(root: Instance): ImageLabel
+	local graphics = root:FindFirstChild("SupercornerImages")
+	assert(graphics ~= nil and graphics:IsA("Folder"), "Supercorner stroke must retain the graphics container")
+
+	local stroke = graphics:FindFirstChild("Stroke")
+	assert(stroke ~= nil and stroke:IsA("ImageLabel"), "Visible strokes must use a Supercorner image renderer")
+	assert(root:FindFirstChildWhichIsA("UIStroke", true) == nil, "Normal rendering must not create UIStroke")
+
+	return stroke :: ImageLabel
 end
 
 local function AssertNotOptimizedSquare(root: Instance)
@@ -199,6 +212,14 @@ local function AssertNotOptimizedSquare(root: Instance)
 
 	local fill = graphics:FindFirstChild("Fill")
 	assert(fill == nil or not fill:IsA("Frame"), "Nonzero or redrawable geometry must stay on the image path")
+end
+
+local function AssertImageRenderer(root: Instance)
+	local graphics = root:FindFirstChild("SupercornerImages")
+	assert(graphics ~= nil and graphics:IsA("Folder"), "Image rendering must retain the graphics container")
+
+	local fill = graphics:FindFirstChild("Fill")
+	assert(fill ~= nil and fill:IsA("ImageLabel"), "Forced zero-radius geometry must use an image renderer")
 end
 
 local function AssertSquareHierarchy()
@@ -210,23 +231,9 @@ local function AssertSquareHierarchy()
 		"Optimized square fill transparency must stay reactive"
 	)
 
-	local strokeThickness = Peek<<number>>(SquareStrokeThicknessState) :: number
-	local stroke = fill:FindFirstChild("Stroke")
-
-	if strokeThickness > 0 then
-		assert(stroke ~= nil and stroke:IsA("UIStroke"), "Optimized square must use UIStroke for its stroke")
-		assert(stroke.Thickness == strokeThickness, "Optimized square stroke thickness must stay reactive")
-		assert(stroke.ApplyStrokeMode == Enum.ApplyStrokeMode.Border, "Square stroke must render as a border")
-		assert(
-			stroke.BorderStrokePosition == Enum.BorderStrokePosition.Inner,
-			"Square stroke must remain inside its bounds"
-		)
-		assert(stroke.LineJoinMode == Enum.LineJoinMode.Miter, "Square stroke must retain sharp corners")
-		assert(stroke.ZIndex == 3, "Square stroke must render above content")
-		assert(stroke:FindFirstChildWhichIsA("UIGradient") ~= nil, "Square stroke must preserve its gradient")
-	else
-		assert(stroke == nil, "Optimized square must remove UIStroke when stroke thickness is zero")
-	end
+	local stroke = GetSupercornerStroke(SquareRoot)
+	assert(stroke.ZIndex == 3, "Supercorner stroke must render above content")
+	assert(stroke:FindFirstChildWhichIsA("UIGradient") ~= nil, "Supercorner stroke must preserve its gradient")
 
 	local content = SquareRoot:FindFirstChild("Content")
 	assert(content ~= nil and content:IsA("Frame"), "Optimized square must contain a Content Frame")
@@ -235,15 +242,19 @@ local function AssertSquareHierarchy()
 
 	local hollowFill = GetSquareFill(HollowSquareRoot)
 	assert(hollowFill.BackgroundTransparency == 1, "A hollow optimized square must have a transparent Frame")
-	assert(hollowFill:FindFirstChildWhichIsA("UIStroke") ~= nil, "A hollow optimized square may retain its stroke")
+	GetSupercornerStroke(HollowSquareRoot)
 
 	local emptyFill = GetSquareFill(EmptySquareRoot)
 	assert(emptyFill.BackgroundTransparency == 1, "An empty optimized square must have a transparent Frame")
-	assert(emptyFill:FindFirstChildWhichIsA("UIStroke") == nil, "A zero-thickness stroke must not create UIStroke")
+	local emptyGraphics = emptyFill.Parent
+	assert(emptyGraphics ~= nil, "An empty optimized square must retain the graphics container")
+	assert(emptyGraphics:FindFirstChild("Stroke") == nil, "A zero-thickness stroke must not create an image renderer")
+	assert(EmptySquareRoot:FindFirstChildWhichIsA("UIStroke", true) == nil, "A zero-thickness stroke must not create UIStroke")
 
 	GetSquareFill(OverriddenSquareRoot)
 	assert(SquareButtonRoot:IsA("TextButton"), "Button optimized squares must remain TextButtons")
 	GetSquareFill(SquareButtonRoot)
+	AssertImageRenderer(ForcedSquareRoot)
 	AssertNotOptimizedSquare(NonSquareCornerRoot)
 	AssertNotOptimizedSquare(RedrawableSquareRoot)
 end
@@ -287,7 +298,6 @@ task.spawn(function()
 	BackgroundTransparencyState:set(1)
 	StrokeThicknessState:set(0)
 	SquareBackgroundTransparencyState:set(1)
-	SquareStrokeThicknessState:set(0)
 	task.defer(AssertHierarchy)
 	task.defer(AssertSquareHierarchy)
 
@@ -295,7 +305,6 @@ task.spawn(function()
 	BackgroundTransparencyState:set(0.5)
 	StrokeThicknessState:set(5)
 	SquareBackgroundTransparencyState:set(0.25)
-	SquareStrokeThicknessState:set(4)
 	task.defer(AssertHierarchy)
 	task.defer(AssertSquareHierarchy)
 end)
@@ -311,6 +320,7 @@ Scope:New("ScreenGui") {
 		EmptySquare = EmptySquareRoot,
 		OverriddenSquare = OverriddenSquareRoot,
 		SquareButton = SquareButtonRoot,
+		ForcedSquare = ForcedSquareRoot,
 		NonSquareCorner = NonSquareCornerRoot,
 		RedrawableSquare = RedrawableSquareRoot,
 	},

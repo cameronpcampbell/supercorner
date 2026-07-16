@@ -51,10 +51,16 @@ values. For predetermined animations between two geometries, prefer
 `Supercorner.atlas` to pre-render discrete keypoints.
 
 When all four effective corner radii are `0` and `Redrawable` is false,
-`Supercorner.new` renders the shape with a regular `Frame` and an optional
-`UIStroke`. This avoids allocating image content for a rectangular shape.
-Fill color/transparency and stroke thickness/color/transparency remain reactive
-in this mode; a fully transparent fill produces a hollow frame.
+`Supercorner.new` renders the fill with a regular `Frame`. This avoids allocating
+image content for a rectangular fill, while any visible stroke continues to use
+the normal Supercorner image renderer. Fill color and transparency remain
+reactive in this mode; a fully transparent fill produces a hollow shape with a
+Supercorner-rendered stroke.
+
+Set `ForceSupercorner = true` to disable this zero-radius fill optimization and
+keep the entire component on the normal Supercorner image-rendering path. This
+is a static construction option and does not disable the emergency fallback
+used when Supercorner image creation fails.
 
 ## Fallback Behavior
 

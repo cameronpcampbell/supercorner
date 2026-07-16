@@ -37,6 +37,7 @@ local SUPERCORNER_KEYS = {
 	MaxTopRightRadius = true, MaxBottomRightRadius = true,
 	MaxBottomLeftRadius = true, PreserveSmoothing = true,
 	AntiAlias = true, Redrawable = true,
+	ForceSupercorner = true,
 	Button = true,
 	RootChildren = true,
 	StrokeThickness = true, StrokeColor = true,
@@ -118,6 +119,7 @@ local function SupercornerFusion(
 		PreserveSmoothing: UsedAs<boolean>?,
 		AntiAlias: UsedAs<boolean>?,
 		Redrawable: UsedAs<boolean>?,
+		ForceSupercorner: boolean?,
 		Button: boolean?,
 		RootChildren: Child?,
 		BackgroundColor3: UsedAs<Color3>?,
@@ -150,12 +152,14 @@ local function SupercornerFusion(
 	end
 
 	local isRedrawable = Peek<<boolean>>(props.Redrawable or false) :: boolean
-	local useSquareRenderer = not isRedrawable and HasZeroCornerRadii(props)
+	local forceSupercorner = props.ForceSupercorner == true
+	local useSquareFill =
+		not forceSupercorner
+		and not isRedrawable
+		and HasZeroCornerRadii(props)
 	local reactiveRedrawProp: string? = nil
 
 	for _, propName in REDRAW_PROPS do
-		if useSquareRenderer and propName == "StrokeThickness" then continue end
-
 		if typeof(props[propName]) == "table" then
 			reactiveRedrawProp = propName
 			break
@@ -167,23 +171,6 @@ local function SupercornerFusion(
 			`[Supercorner Fusion] '{reactiveRedrawProp}' is reactive, but this component is not redrawable. `
 				.. "Pass `Redrawable = true` and configure the maximum corner radii to apply reactive geometry updates."
 		)
-	end
-
-	if useSquareRenderer then
-		local strokeGradient: Instance? = nil
-
-		if props.StrokeGradient ~= nil then
-			strokeGradient = Peek<<Instance>>(props.StrokeGradient) :: Instance
-		end
-
-		return Shared.RenderSquare(scope, passthroughProps, userChildren, {
-			bgColor = props.BackgroundColor3,
-			bgTransparency = props.BackgroundTransparency,
-			strokeThickness = props.StrokeThickness,
-			strokeColor = props.StrokeColor,
-			strokeTransparency = props.StrokeTransparency,
-			strokeGradient = strokeGradient,
-		}, props.Button, userRootChildren)
 	end
 
 	-- Derived state
@@ -229,7 +216,7 @@ local function SupercornerFusion(
 	-- Initial creation
 	local useFallback = false
 
-	if (Peek<<boolean>>(computeNeedsFill) :: boolean) then
+	if not useSquareFill and (Peek<<boolean>>(computeNeedsFill) :: boolean) then
 		fillSC = TryCreateSupercorner(props, 0)
 
 		if fillSC then
@@ -393,31 +380,33 @@ local function SupercornerFusion(
 	end
 
 	-- Fill toggle observer
-	scope:Observer(computeNeedsFill):onChange(function()
-		local peekedNeedsFill = Peek<<boolean>>(computeNeedsFill) :: boolean
+	if not useSquareFill then
+		scope:Observer(computeNeedsFill):onChange(function()
+			local peekedNeedsFill = Peek<<boolean>>(computeNeedsFill) :: boolean
 
-		if peekedNeedsFill and not fillSC then
-			local newFillSC = TryCreateSupercorner(props, 0)
-			fillSC = newFillSC
-			pendingFillRedraw = false
+			if peekedNeedsFill and not fillSC then
+				local newFillSC = TryCreateSupercorner(props, 0)
+				fillSC = newFillSC
+				pendingFillRedraw = false
 
-			if newFillSC then
-				UpdateSupercornerValues(
-					newFillSC,
-					fillContentState,
-					fillSliceCenterState,
-					fillSliceScaleState,
-					fillHasContentState
-				)
+				if newFillSC then
+					UpdateSupercornerValues(
+						newFillSC,
+						fillContentState,
+						fillSliceCenterState,
+						fillSliceScaleState,
+						fillHasContentState
+					)
+				end
+
+			elseif not peekedNeedsFill and fillSC then
+				fillSC:Destroy()
+				fillSC = nil
+				pendingFillRedraw = false
+				ClearSupercornerValues(fillContentState, fillHasContentState)
 			end
-
-		elseif not peekedNeedsFill and fillSC then
-			fillSC:Destroy()
-			fillSC = nil
-			pendingFillRedraw = false
-			ClearSupercornerValues(fillContentState, fillHasContentState)
-		end
-	end)
+		end)
+	end
 
 	-- Stroke toggle observer
 	scope:Observer(computeNeedsStroke):onChange(function()
@@ -466,22 +455,35 @@ local function SupercornerFusion(
 	-- Solver V2 loses Fusion's constructors from the inferred inner-scope type.
 	local imageScope: Scope = Fusion.innerScope(scope) :: any
 
-	local computeFillChild = imageScope:Computed(function(use, innerScope: Scope): Instance?
-		if not (use<<boolean>>(fillHasContentState) :: boolean) then return nil end
+	local fillChild: Child
 
-		return innerScope:New("ImageLabel") {
+	if useSquareFill then
+		fillChild = imageScope:New("Frame") {
 			Name = "Fill",
-			ImageContent = fillContentState,
-			ScaleType = Enum.ScaleType.Slice,
-			SliceCenter = fillSliceCenterState,
-			SliceScale = fillSliceScaleState,
-			BackgroundTransparency = 1,
-			ImageColor3 = props.BackgroundColor3,
-			ImageTransparency = props.BackgroundTransparency,
+			BackgroundColor3 = props.BackgroundColor3,
+			BackgroundTransparency = props.BackgroundTransparency,
+			BorderSizePixel = 0,
 			Size = UDim2.new(1, 0, 1, 0),
 			ZIndex = 1,
 		}
-	end)
+	else
+		fillChild = imageScope:Computed(function(use, innerScope: Scope): Instance?
+			if not (use<<boolean>>(fillHasContentState) :: boolean) then return nil end
+
+			return innerScope:New("ImageLabel") {
+				Name = "Fill",
+				ImageContent = fillContentState,
+				ScaleType = Enum.ScaleType.Slice,
+				SliceCenter = fillSliceCenterState,
+				SliceScale = fillSliceScaleState,
+				BackgroundTransparency = 1,
+				ImageColor3 = props.BackgroundColor3,
+				ImageTransparency = props.BackgroundTransparency,
+				Size = UDim2.new(1, 0, 1, 0),
+				ZIndex = 1,
+			}
+		end)
+	end
 
 	local computeStrokeChild = imageScope:Computed(function(use, innerScope: Scope): Instance?
 		if not (use<<boolean>>(strokeHasContentState) :: boolean) then return nil end
@@ -511,7 +513,7 @@ local function SupercornerFusion(
 		Name = "SupercornerImages",
 
 		[Children] = {
-			computeFillChild,
+			fillChild,
 			computeStrokeChild,
 		},
 	}

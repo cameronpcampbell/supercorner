@@ -288,83 +288,6 @@ local function RenderFallback(
 	end
 end
 
-local function RenderSquare(
-	scope: Scope,
-	passthroughProps: { [any]: any },
-	userChildren: Child?,
-	visual: VisualProps,
-	button: boolean?,
-	rootChildren: Child?
-): Instance
-	-- Solver V2 loses Fusion's constructors from the inferred inner-scope type.
-	local graphicsScope: Scope = Fusion.innerScope(scope) :: any
-	local needsStroke = graphicsScope:Computed(function(use: Fusion.Use): boolean
-		return (use<<number>>(visual.strokeThickness or 0) :: number) > 0
-	end)
-
-	local squareFrame = graphicsScope:New("Frame") {
-		Name = "Fill",
-		BackgroundColor3 = visual.bgColor,
-		BackgroundTransparency = visual.bgTransparency,
-		BorderSizePixel = 0,
-		Size = UDim2.new(1, 0, 1, 0),
-		ZIndex = 1,
-
-		[Children] = {
-			Stroke = graphicsScope:Computed(function(use: Fusion.Use, innerScope: Scope): Instance?
-				if not (use<<boolean>>(needsStroke) :: boolean) then return nil end
-
-				local strokeChildren: { [any]: any }? = nil
-
-				if visual.strokeGradient then
-					strokeChildren = { StrokeGradient = visual.strokeGradient:Clone() }
-				end
-
-				local strokeColor = if visual.strokeGradient
-					then Color3.new(1, 1, 1)
-					else visual.strokeColor or Color3.new(1, 1, 1)
-
-				return innerScope:New("UIStroke") {
-					Name = "Stroke",
-					Thickness = visual.strokeThickness,
-					Color = strokeColor,
-					Transparency = visual.strokeTransparency,
-					ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
-					BorderStrokePosition = Enum.BorderStrokePosition.Inner,
-					LineJoinMode = Enum.LineJoinMode.Miter,
-					ZIndex = 3,
-					[Children] = strokeChildren,
-				}
-			end),
-		},
-	}
-
-	local imageFolder = graphicsScope:New("Folder") {
-		Name = "SupercornerImages",
-
-		[Children] = {
-			squareFrame,
-		},
-	}
-
-	local allChildren: { [any]: any } = {
-		imageFolder,
-		CreateContentFrame(scope, userChildren),
-		rootChildren,
-	}
-
-	local rootProps: { [any]: any } = {
-		BackgroundTransparency = 1,
-		[Children] = allChildren,
-	}
-
-	for key, value in passthroughProps do
-		rootProps[key] = value
-	end
-
-	return RenderRoot(scope, button, "Frame", rootProps)
-end
-
 return {
 	NON_PASSTHROUGH_KEYS = NON_PASSTHROUGH_KEYS,
 	UICORNER_HAS_INDIVIDUAL_RADII = UICORNER_HAS_INDIVIDUAL_RADII,
@@ -373,5 +296,4 @@ return {
 	GetPassthroughProps = GetPassthroughProps,
 	RenderRoot = RenderRoot,
 	RenderFallback = RenderFallback,
-	RenderSquare = RenderSquare,
 }
